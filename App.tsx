@@ -1,3 +1,4 @@
+import 'react-native-gesture-handler';
 import React from 'react';
 import { BudgetProvider } from './src/context/BudgetContext';
 import AppNavigator from './src/navigation';
