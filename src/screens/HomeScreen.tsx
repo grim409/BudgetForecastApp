@@ -1,39 +1,30 @@
-// src/screens/HomeScreen.tsx
-
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  Button,
-  StyleSheet,
-  FlatList,
-  ListRenderItemInfo,
-  Dimensions,
-  ScrollView,
-  TouchableOpacity,
+  View, Text, Button, StyleSheet, FlatList,
+  ListRenderItemInfo, Dimensions, ScrollView, TouchableOpacity
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import { LineChart } from 'react-native-chart-kit';
 import { useBudget, RecurringItem, OneOffPurchase } from '../context/BudgetContext';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
-import { LineChart } from 'react-native-chart-kit';
-import { Picker } from '@react-native-picker/picker';
 
 type HomeNavProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 interface HorizonOption {
   label: string;
-  unit: 'week' | 'month';
+  unit: 'day' | 'month';
   count: number;
 }
 
 const horizonOptions: HorizonOption[] = [
-  { label: '1 Week',    unit: 'week',  count: 1  },
-  { label: '1 Month',   unit: 'month', count: 1  },
-  { label: '3 Months',  unit: 'month', count: 3  },
-  { label: '6 Months',  unit: 'month', count: 6  },
-  { label: '12 Months', unit: 'month', count: 12 },
-  { label: '24 Months', unit: 'month', count: 24 },
+  { label: '1 Week',    unit: 'day',   count: 7   },
+  { label: '1 Month',   unit: 'day',   count: 30  },
+  { label: '3 Months',  unit: 'month', count: 3   },
+  { label: '6 Months',  unit: 'month', count: 6   },
+  { label: '12 Months', unit: 'month', count: 12  },
+  { label: '24 Months', unit: 'month', count: 24  },
 ];
 
 export default function HomeScreen() {
@@ -41,10 +32,8 @@ export default function HomeScreen() {
   const navigation = useNavigation<HomeNavProp>();
   const screenWidth = Dimensions.get('window').width;
 
-  // 1) Horizon selector state
-  const [horizon, setHorizon] = useState<HorizonOption>(horizonOptions[4]);
+  const [horizon, setHorizon] = useState<HorizonOption>(horizonOptions[1]); // default 1 Month
 
-  // 2) Compute monthly & daily net from recurring items
   const totalMonthly = state.recurringItems.reduce((sum, item) => {
     let m = item.amount;
     switch (item.unit) {
@@ -57,12 +46,12 @@ export default function HomeScreen() {
   }, 0);
   const dailyNet = totalMonthly / 30;
 
-  // 3) Build forecast data based on horizon
   const today = new Date();
   const purchases = state.purchases as OneOffPurchase[];
-
-  const isDaily = horizon.unit === 'week';
-  const steps = isDaily ? horizon.count * 7 : horizon.count;
+  const isDaily = horizon.unit === 'day';
+  const steps = horizon.count;
+  const POINT_WIDTH = 60;
+  const HORIZ_PADDING = 32;
 
   const forecastData = Array.from({ length: steps }).map((_, i) => {
     const date = isDaily
@@ -87,13 +76,16 @@ export default function HomeScreen() {
   const yData = forecastData.map(p => p.value);
   const xLabels = forecastData.map(p => p.label);
 
+  const rawWidth = xLabels.length * POINT_WIDTH;
+  const chartWidth = Math.max(rawWidth, screenWidth - HORIZ_PADDING);
+
   const chartData = { labels: xLabels, datasets: [{ data: yData }] };
   const chartConfig = {
     backgroundGradientFrom: '#fff',
     backgroundGradientTo:   '#fff',
     decimalPlaces:         0,
-    color:    (opacity = 1) => `rgba(30,144,255, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(0,0,0, ${opacity})`,
+    color:                (opacity = 1) => `rgba(30,144,255, ${opacity})`,
+    labelColor:           (opacity = 1) => `rgba(0,0,0, ${opacity})`,
     propsForDots:         { r: '4', strokeWidth: '1', stroke: '#1e90ff' },
   };
 
@@ -119,31 +111,30 @@ export default function HomeScreen() {
       contentContainerStyle={{ padding: 16 }}
       ListHeaderComponent={() => (
         <View>
-          {/* Horizon Picker */}
+          {/* Horizon Selector */}
           <Text style={styles.label}>Forecast Horizon</Text>
           <View style={styles.pickerRow}>
             <Picker
               selectedValue={horizon.label}
-              onValueChange={(label) => {
+              onValueChange={label => {
                 const opt = horizonOptions.find(o => o.label === label)!;
                 setHorizon(opt);
               }}
+              mode="dropdown"
               style={styles.picker}
             >
               {horizonOptions.map(o => (
-                <Picker.Item key={o.label} label={o.label} value={o.label}/>
+                <Picker.Item key={o.label} label={o.label} value={o.label} />
               ))}
             </Picker>
           </View>
 
           {/* Chart */}
-          <Text style={styles.chartTitle}>
-            Balance Forecast ({horizon.label})
-          </Text>
+          <Text style={styles.chartTitle}>Balance Forecast ({horizon.label})</Text>
           <ScrollView horizontal contentContainerStyle={styles.chartScroll}>
             <LineChart
               data={chartData}
-              width={xLabels.length * 60}
+              width={chartWidth}
               height={220}
               chartConfig={chartConfig}
               bezier
@@ -151,7 +142,7 @@ export default function HomeScreen() {
             />
           </ScrollView>
 
-          {/* Detail Table */}
+          {/* Details */}
           <Text style={styles.detailTitle}>Forecast Details</Text>
           {forecastData.map(p => (
             <View key={p.label} style={styles.detailRow}>
@@ -160,10 +151,10 @@ export default function HomeScreen() {
             </View>
           ))}
 
-          {/* Summary & Navigation */}
+          {/* Summary & Nav */}
           <Text style={styles.title}>Projected Net</Text>
-          <Text style={styles.balance}>$
-            {(isDaily ? dailyNet : totalMonthly).toFixed(2)}
+          <Text style={styles.balance}>
+            ${(isDaily ? dailyNet : totalMonthly).toFixed(2)}
             {isDaily ? ' per day' : ' per month'}
           </Text>
 
@@ -186,36 +177,33 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  label: { fontSize: 16, marginBottom: 4 },
-  pickerRow: { borderWidth: 1, borderColor: '#999', borderRadius: 4, marginBottom: 16 },
-  picker: { height: 44, width: '100%' },
+  label:      { fontSize: 16, marginBottom: 4 },
+    pickerRow: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#999',
+    borderRadius: 4,
+    marginBottom: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  picker:     { width: '100%', color: '#000' },
 
   chartTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
-  chartScroll: { paddingRight: 16, marginBottom: 16 },
+  chartScroll:{ paddingRight: 16, marginBottom: 16 },
   chartStyle: { borderRadius: 8 },
 
-  detailTitle: { fontSize: 18, fontWeight: '600', marginBottom: 4 },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderColor: '#eee',
-  },
-  detailLabel: { fontSize: 14 },
-  detailValue: { fontSize: 14, fontWeight: '500' },
+  detailTitle:{ fontSize: 18, fontWeight: '600', marginBottom: 4 },
+  detailRow:  { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderColor: '#eee' },
+  detailLabel:{ fontSize: 14 },
+  detailValue:{ fontSize: 14, fontWeight: '500' },
 
-  title: { fontSize: 22, fontWeight: '600', marginTop: 16, marginBottom: 4 },
-  balance: { fontSize: 28, fontWeight: 'bold', marginBottom: 16 },
+  title:      { fontSize: 22, fontWeight: '600', marginTop: 16, marginBottom: 4 },
+  balance:    { fontSize: 28, fontWeight: 'bold', marginBottom: 16 },
 
-  listTitle: { fontSize: 18, marginTop: 24, marginBottom: 8 },
-  itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderColor: '#ddd',
-  },
-  itemTitle: { fontSize: 16 },
-  emptyText: { textAlign: 'center', marginTop: 32, color: '#666' },
+  listTitle:  { fontSize: 18, marginTop: 24, marginBottom: 8 },
+  itemRow:    { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderColor: '#ddd' },
+  itemTitle:  { fontSize: 16 },
+  emptyText:  { textAlign: 'center', marginTop: 32, color: '#666' },
+
 });
