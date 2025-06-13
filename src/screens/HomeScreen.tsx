@@ -54,7 +54,7 @@ export default function HomeScreen() {
     };
   });
 
-  // Extract arrays
+  // Extract arrays for chart
   const yData = forecastData.map((p) => p.value);
   const xLabels = forecastData.map((p) => p.label);
 
@@ -72,6 +72,7 @@ export default function HomeScreen() {
     propsForDots: { r: '4', strokeWidth: '1', stroke: '#1e90ff' },
   };
 
+  // Render a single recurring item
   const renderItem = ({ item }: ListRenderItemInfo<RecurringItem>) => (
     <View style={styles.itemRow}>
       <Text style={styles.itemTitle}>{item.title}</Text>
@@ -83,58 +84,71 @@ export default function HomeScreen() {
   );
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Forecast Chart */}
-      <Text style={styles.chartTitle}>Balance Forecast (12 months)</Text>
-      <ScrollView horizontal contentContainerStyle={styles.chartScroll}>
-        <LineChart
-          data={chartData}
-          width={xLabels.length * 60}
-          height={220}
-          chartConfig={chartConfig}
-          bezier
-          style={styles.chartStyle}
-        />
-      </ScrollView>
+    <FlatList
+      data={state.recurringItems}
+      keyExtractor={(item) => item.id}
+      renderItem={renderItem}
+      contentContainerStyle={{ padding: 16 }}
+      ListHeaderComponent={() => (
+        <View>
+          {/* Forecast Chart */}
+          <Text style={styles.chartTitle}>Balance Forecast (12 months)</Text>
+          <ScrollView
+            horizontal
+            contentContainerStyle={styles.chartScroll}
+          >
+            <LineChart
+              data={chartData}
+              width={xLabels.length * 60}
+              height={220}
+              chartConfig={chartConfig}
+              bezier
+              style={styles.chartStyle}
+            />
+          </ScrollView>
 
-      {/* Forecast Details Table */}
-      <Text style={styles.detailTitle}>Forecast Details</Text>
-      {forecastData.map((p) => (
-        <View key={p.label} style={styles.detailRow}>
-          <Text style={styles.detailLabel}>{p.label}</Text>
-          <Text style={styles.detailValue}>${p.value.toFixed(2)}</Text>
+          {/* Forecast Details Table */}
+          <Text style={styles.detailTitle}>Forecast Details</Text>
+          {forecastData.map((p) => (
+            <View key={p.label} style={styles.detailRow}>
+              <Text style={styles.detailLabel}>{p.label}</Text>
+              <Text style={styles.detailValue}>
+                ${p.value.toFixed(2)}
+              </Text>
+            </View>
+          ))}
+
+          {/* Summary & Button */}
+          <Text style={styles.title}>Projected Monthly Net</Text>
+          <Text style={styles.balance}>
+            ${totalMonthly.toFixed(2)}
+          </Text>
+          <Button
+            title="Add Recurring Item"
+            onPress={() => navigation.navigate('AddRecurring')}
+          />
+
+          {/* Section Header for List */}
+          <Text style={styles.listTitle}>Your Recurring Items</Text>
         </View>
-      ))}
-
-      {/* Summary */}
-      <Text style={styles.title}>Projected Monthly Net</Text>
-      <Text style={styles.balance}>${totalMonthly.toFixed(2)}</Text>
-
-      <Button
-        title="Add Recurring Item"
-        onPress={() => navigation.navigate('AddRecurring')}
-      />
-
-      {/* Recurring Items List */}
-      <Text style={styles.listTitle}>Your Recurring Items</Text>
-      <FlatList
-        data={state.recurringItems}
-        keyExtractor={(i) => i.id}
-        renderItem={renderItem}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No items yet.</Text>
-        }
-      />
-    </ScrollView>
+      )}
+      ListEmptyComponent={
+        <Text style={styles.emptyText}>No items yet.</Text>
+      }
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
   chartTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
   chartScroll: { paddingRight: 16, marginBottom: 16 },
   chartStyle: { borderRadius: 8 },
-  detailTitle: { fontSize: 18, fontWeight: '600', marginTop: 8, marginBottom: 4 },
+  detailTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 8,
+    marginBottom: 4,
+  },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
