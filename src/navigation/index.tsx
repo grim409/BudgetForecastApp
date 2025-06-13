@@ -3,9 +3,11 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import HomeScreen from '../screens/HomeScreen';
+import RecurringItemForm from '../screens/RecurringItemForm';
 
 export type RootStackParamList = {
   Home: undefined;
+  AddRecurring: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -18,6 +20,11 @@ export default function AppNavigator() {
           name="Home"
           component={HomeScreen}
           options={{ title: 'Budget Forecast' }}
+        />
+        <Stack.Screen
+            name="AddRecurring"
+            component={RecurringItemForm}
+            options={{title: 'Add Recurring Item'}}
         />
       </Stack.Navigator>
     </NavigationContainer>
