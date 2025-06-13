@@ -1,5 +1,3 @@
-// src/screens/HomeScreen.tsx
-
 import React from 'react';
 import {
   View,
@@ -10,6 +8,7 @@ import {
   ListRenderItemInfo,
   Dimensions,
   ScrollView,
+  TouchableOpacity,
 } from 'react-native';
 import { useBudget, RecurringItem } from '../context/BudgetContext';
 import { useNavigation } from '@react-navigation/native';
@@ -24,27 +23,18 @@ export default function HomeScreen() {
   const navigation = useNavigation<HomeNavProp>();
   const screenWidth = Dimensions.get('window').width;
 
-  // 1) Compute net monthly amount
+  // compute totalMonthly & forecastData as before...
   const totalMonthly = state.recurringItems.reduce((sum, item) => {
     let m = item.amount;
     switch (item.unit) {
-      case 'day':
-        m = (item.amount * item.interval * 365) / 12;
-        break;
-      case 'week':
-        m = (item.amount * item.interval * 52) / 12;
-        break;
-      case 'month':
-        m = item.amount * item.interval;
-        break;
-      case 'year':
-        m = (item.amount * item.interval) / 12;
-        break;
+      case 'day':   m = (item.amount * item.interval * 365) / 12; break;
+      case 'week':  m = (item.amount * item.interval * 52) / 12; break;
+      case 'month': m = item.amount * item.interval; break;
+      case 'year':  m = (item.amount * item.interval) / 12; break;
     }
     return sum + (item.type === 'credit' ? m : -m);
   }, 0);
 
-  // 2) Build 12-month forecast points
   const today = new Date();
   const forecastData = Array.from({ length: 12 }).map((_, i) => {
     const date = new Date(today.getFullYear(), today.getMonth() + i + 1, 1);
@@ -54,15 +44,10 @@ export default function HomeScreen() {
     };
   });
 
-  // Extract arrays for chart
   const yData = forecastData.map((p) => p.value);
   const xLabels = forecastData.map((p) => p.label);
 
-  // Chart data & config
-  const chartData = {
-    labels: xLabels,
-    datasets: [{ data: yData }],
-  };
+  const chartData = { labels: xLabels, datasets: [{ data: yData }] };
   const chartConfig = {
     backgroundGradientFrom: '#fff',
     backgroundGradientTo: '#fff',
@@ -72,15 +57,18 @@ export default function HomeScreen() {
     propsForDots: { r: '4', strokeWidth: '1', stroke: '#1e90ff' },
   };
 
-  // Render a single recurring item
   const renderItem = ({ item }: ListRenderItemInfo<RecurringItem>) => (
-    <View style={styles.itemRow}>
-      <Text style={styles.itemTitle}>{item.title}</Text>
-      <Text>
-        {item.type === 'credit' ? '+ ' : '- '}
-        ${item.amount.toFixed(2)} every {item.interval} {item.unit}(s)
-      </Text>
-    </View>
+    <TouchableOpacity
+      onPress={() => navigation.navigate('AddRecurring', { item })}
+    >
+      <View style={styles.itemRow}>
+        <Text style={styles.itemTitle}>{item.title}</Text>
+        <Text>
+          {item.type === 'credit' ? '+ ' : '- '}
+          ${item.amount.toFixed(2)} every {item.interval} {item.unit}(s)
+        </Text>
+      </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -91,12 +79,9 @@ export default function HomeScreen() {
       contentContainerStyle={{ padding: 16 }}
       ListHeaderComponent={() => (
         <View>
-          {/* Forecast Chart */}
+          {/* chart and details table as before */}
           <Text style={styles.chartTitle}>Balance Forecast (12 months)</Text>
-          <ScrollView
-            horizontal
-            contentContainerStyle={styles.chartScroll}
-          >
+          <ScrollView horizontal contentContainerStyle={styles.chartScroll}>
             <LineChart
               data={chartData}
               width={xLabels.length * 60}
@@ -107,34 +92,25 @@ export default function HomeScreen() {
             />
           </ScrollView>
 
-          {/* Forecast Details Table */}
           <Text style={styles.detailTitle}>Forecast Details</Text>
           {forecastData.map((p) => (
             <View key={p.label} style={styles.detailRow}>
               <Text style={styles.detailLabel}>{p.label}</Text>
-              <Text style={styles.detailValue}>
-                ${p.value.toFixed(2)}
-              </Text>
+              <Text style={styles.detailValue}>${p.value.toFixed(2)}</Text>
             </View>
           ))}
 
-          {/* Summary & Button */}
           <Text style={styles.title}>Projected Monthly Net</Text>
-          <Text style={styles.balance}>
-            ${totalMonthly.toFixed(2)}
-          </Text>
+          <Text style={styles.balance}>${totalMonthly.toFixed(2)}</Text>
           <Button
             title="Add Recurring Item"
-            onPress={() => navigation.navigate('AddRecurring')}
+            onPress={() => navigation.navigate('AddRecurring', {})}
           />
 
-          {/* Section Header for List */}
           <Text style={styles.listTitle}>Your Recurring Items</Text>
         </View>
       )}
-      ListEmptyComponent={
-        <Text style={styles.emptyText}>No items yet.</Text>
-      }
+      ListEmptyComponent={<Text style={styles.emptyText}>No items yet.</Text>}
     />
   );
 }
