@@ -7,29 +7,42 @@ import {
   StyleSheet,
   Platform,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
-import { useBudget } from '../context/BudgetContext';
+import { useBudget, RecurringItem } from '../context/BudgetContext';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
 import { v4 as uuidv4 } from 'uuid';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddRecurring'>;
 
-export default function RecurringItemForm({ navigation }: Props) {
+export default function RecurringItemForm({ route, navigation }: Props) {
   const { state, setState } = useBudget();
-  const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState('');
-  const [type, setType] = useState<'credit' | 'debit'>('credit');
-  const [interval, setInterval] = useState('1');
-  const [unit, setUnit] = useState<'day'|'week'|'month'|'year'>('month');
-  const [startDate, setStartDate] = useState(new Date());
+  const existing = route.params?.item;
+
+  const [title, setTitle] = useState(existing?.title ?? '');
+  const [amount, setAmount] = useState(
+    existing ? existing.amount.toString() : ''
+  );
+  const [type, setType] = useState<'credit' | 'debit'>(
+    existing?.type ?? 'credit'
+  );
+  const [interval, setInterval] = useState(
+    existing ? existing.interval.toString() : '1'
+  );
+  const [unit, setUnit] = useState<'day' | 'week' | 'month' | 'year'>(
+    existing?.unit ?? 'month'
+  );
+  const [startDate, setStartDate] = useState<Date>(
+    existing ? new Date(existing.startDate) : new Date()
+  );
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  const addItem = () => {
-    const newItem = {
-      id: uuidv4(),
+  const save = () => {
+    const newItem: RecurringItem = {
+      id: existing?.id ?? uuidv4(),
       title: title.trim(),
       amount: parseFloat(amount),
       type,
@@ -38,11 +51,46 @@ export default function RecurringItemForm({ navigation }: Props) {
       startDate: startDate.toISOString(),
     };
 
-    setState({
-      ...state,
-      recurringItems: [...state.recurringItems, newItem],
-    });
+    if (existing) {
+      // update
+      setState({
+        ...state,
+        recurringItems: state.recurringItems.map((i) =>
+          i.id === existing.id ? newItem : i
+        ),
+      });
+    } else {
+      // add
+      setState({
+        ...state,
+        recurringItems: [...state.recurringItems, newItem],
+      });
+    }
     navigation.goBack();
+  };
+
+  const remove = () => {
+    Alert.alert(
+      'Delete',
+      'Are you sure you want to delete this item?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setState({
+              ...state,
+              recurringItems: state.recurringItems.filter(
+                (i) => i.id !== existing!.id
+              ),
+            });
+            navigation.goBack();
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const onChangeDate = (_: any, date?: Date) => {
@@ -52,7 +100,7 @@ export default function RecurringItemForm({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* Credit / Debit toggle */}
+      {/* Credit / Debit */}
       <View style={styles.toggleRow}>
         <Button
           title="Credit"
@@ -66,7 +114,7 @@ export default function RecurringItemForm({ navigation }: Props) {
         />
       </View>
 
-      {/* Title and Amount */}
+      {/* Title & Amount */}
       <Text style={styles.label}>Title</Text>
       <TextInput
         style={styles.input}
@@ -84,7 +132,7 @@ export default function RecurringItemForm({ navigation }: Props) {
         placeholder="e.g. 5000"
       />
 
-      {/* Interval + Unit */}
+      {/* Interval & Unit */}
       <Text style={styles.label}>Every</Text>
       <View style={styles.inlineRow}>
         <TextInput
@@ -96,7 +144,7 @@ export default function RecurringItemForm({ navigation }: Props) {
         <Picker
           selectedValue={unit}
           style={styles.picker}
-          onValueChange={val => setUnit(val as any)}
+          onValueChange={(v) => setUnit(v as any)}
         >
           <Picker.Item label="day(s)" value="day" />
           <Picker.Item label="week(s)" value="week" />
@@ -113,7 +161,6 @@ export default function RecurringItemForm({ navigation }: Props) {
       >
         <Text>{startDate.toDateString()}</Text>
       </TouchableOpacity>
-
       {showDatePicker && (
         <DateTimePicker
           value={startDate}
@@ -123,11 +170,14 @@ export default function RecurringItemForm({ navigation }: Props) {
         />
       )}
 
-      {/* Save */}
-      <View style={styles.saveButton}>
+      {/* Actions */}
+      <View style={styles.buttonsRow}>
+        {existing && (
+          <Button title="Delete" color="red" onPress={remove} />
+        )}
         <Button
-          title="Save"
-          onPress={addItem}
+          title={existing ? 'Save Changes' : 'Add Item'}
+          onPress={save}
           disabled={!title.trim() || !amount.trim()}
         />
       </View>
@@ -149,16 +199,19 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     padding: 8,
   },
-  smallInput: { width: 60, marginRight: 8 },
   inlineRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  smallInput: { width: 60, marginRight: 8 },
   picker: { flex: 1 },
   dateButton: {
     borderWidth: 1,
     borderColor: '#999',
     borderRadius: 4,
     padding: 12,
-    alignItems: 'center',
     marginBottom: 16,
   },
-  saveButton: { marginTop: 24 },
+  buttonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
+  },
 });
