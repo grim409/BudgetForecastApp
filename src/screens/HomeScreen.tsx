@@ -106,7 +106,11 @@ export default function HomeScreen() {
             title="Add Recurring Item"
             onPress={() => navigation.navigate('AddRecurring', {})}
           />
-
+          <View style={{ height: 16 }} />
+          <Button
+            title="One-Off Purchases"
+            onPress={() => navigation.navigate('PurchaseList')}
+          />
           <Text style={styles.listTitle}>Your Recurring Items</Text>
         </View>
       )}
