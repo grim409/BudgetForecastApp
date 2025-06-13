@@ -36,11 +36,29 @@ export default function HomeScreen() {
   }, 0);
 
   const today = new Date();
+  const purchases = state.purchases; // your OneOffPurchase[]
+
   const forecastData = Array.from({ length: 12 }).map((_, i) => {
-    const date = new Date(today.getFullYear(), today.getMonth() + i + 1, 1);
+    // the first day of month i+1
+    const monthDate = new Date(today.getFullYear(), today.getMonth() + i + 1, 1);
+
+    // Recurring balance up through this month
+    const recurringBalance = totalMonthly * (i + 1);
+
+    // Sum of all purchases planned on or before this month
+    const purchaseImpact = purchases
+      .filter((p) => {
+        const pd = new Date(p.plannedDate);
+        return pd.getFullYear() < monthDate.getFullYear() ||
+          (pd.getFullYear() === monthDate.getFullYear() &&
+          pd.getMonth() + 1 <= monthDate.getMonth() + 1);
+      })
+      .reduce((sum, p) => sum - p.amount, 0);
+
     return {
-      label: `${date.getMonth() + 1}/${String(date.getFullYear()).slice(-2)}`,
-      value: totalMonthly * (i + 1),
+      label: `${monthDate.getMonth() + 1}/${String(monthDate.getFullYear()).slice(-2)}`,
+      // recurring adds, purchases subtract
+      value: recurringBalance + purchaseImpact,
     };
   });
 
