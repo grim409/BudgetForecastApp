@@ -1,13 +1,16 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { db } from '../firebase';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { useAuth } from './AuthContext';
 
 export interface RecurringItem {
   id: string;
   title: string;
   amount: number;
   type: 'credit' | 'debit';
-  startDate: string;      // ISO
-  interval: number;       // e.g. 1, 2, 3…
+  startDate: string;
+  interval: number;
   unit: 'day' | 'week' | 'month' | 'year';
 }
 
@@ -23,7 +26,7 @@ export interface BudgetState {
   purchases: OneOffPurchase[];
 }
 
-const STORAGE_KEY = '@budget_state_v3';
+const STORAGE_KEY = '@budget_state';
 
 const defaultState: BudgetState = {
   recurringItems: [],
@@ -39,35 +42,36 @@ const BudgetContext = createContext<{
 });
 
 export const BudgetProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }) => {
+  const { user } = useAuth();
   const [state, setState] = useState<BudgetState>(defaultState);
 
-  // Load & migrate old data
+  // Load from Firestore when authenticated, otherwise from AsyncStorage
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then(json => {
-      if (!json) return;
-      try {
-        const obj = JSON.parse(json);
-        // Detect old shape (no unit/interval)
-        if (Array.isArray(obj.recurringItems) && obj.recurringItems.length && !('unit' in obj.recurringItems[0])) {
-          const migrated = obj.recurringItems.map((i: any) => ({
-            ...i,
-            interval: 1,
-            unit: 'month' as const,
-          }));
-          setState({ recurringItems: migrated, purchases: obj.purchases || [] });
-        } else {
-          setState(obj);
+    if (user) {
+      const ref = doc(db, 'budgets', user.uid);
+      const unsub = onSnapshot(ref, (snap) => {
+        if (snap.exists()) {
+          setState(snap.data() as BudgetState);
         }
-      } catch {
-        // ignore bad JSON
-      }
-    });
-  }, []);
+      });
+      return unsub;
+    } else {
+      AsyncStorage.getItem(STORAGE_KEY).then((json) => {
+        if (json) {
+          setState(JSON.parse(json));
+        }
+      });
+    }
+  }, [user]);
 
-  // Persist on change
+  // Persist to Firestore when authenticated, otherwise to AsyncStorage
   useEffect(() => {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    if (user) {
+      setDoc(doc(db, 'budgets', user.uid), state);
+    } else {
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+  }, [state, user]);
 
   return (
     <BudgetContext.Provider value={{ state, setState }}>
