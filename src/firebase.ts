@@ -1,8 +1,9 @@
-// src/firebase.ts
 import { initializeApp } from 'firebase/app';
 import {
   initializeFirestore,
+  getFirestore,
   CACHE_SIZE_UNLIMITED,
+  setLogLevel,
 } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -16,8 +17,18 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// force long-polling & unlimited cache
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-  cacheSizeBytes:              CACHE_SIZE_UNLIMITED,
-});
+let db;
+try {
+  db = initializeFirestore(app, {
+    experimentalForceLongPolling:    true,
+    experimentalAutoDetectLongPolling: true,
+    cacheSizeBytes:                   CACHE_SIZE_UNLIMITED,
+  });
+} catch (e) {
+  // already initialized — fall back
+  db = getFirestore(app);
+}
+
+setLogLevel('error');
+
+export { db };
