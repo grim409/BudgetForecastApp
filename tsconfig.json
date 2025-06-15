@@ -2,14 +2,15 @@
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
+    "moduleResolution": "node",
     "lib": ["ESNext", "DOM"],
     "jsx": "react-native",
-    "moduleResolution": "node",
+    "allowJs": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "strict": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "strict": true
   },
   "include": ["src", "declarations.d.ts"]
 }
