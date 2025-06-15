@@ -1,5 +1,6 @@
-import * as React from 'react';
-import { createContext, useContext, useEffect, useState } from 'react';
+// src/context/BudgetContext.tsx
+
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
@@ -26,14 +27,20 @@ export interface BudgetState {
   purchases: OneOffPurchase[];
 }
 
-const STORAGE_KEY = '@budget_state';
-const SHARED_DOC_ID = 'shared';
-
 const defaultState: BudgetState = {
   recurringItems: [],
   purchases: [],
 };
 
+const STORAGE_KEY = '@budget_state';
+
+/** Props for the BudgetProvider, including the groupId and children */
+interface BudgetProviderProps {
+  groupId: string;
+  children: React.ReactNode;
+}
+
+/** Context to hold the budget state & setter */
 const BudgetContext = createContext<{
   state: BudgetState;
   setState: React.Dispatch<React.SetStateAction<BudgetState>>;
@@ -42,35 +49,40 @@ const BudgetContext = createContext<{
   setState: () => {},
 });
 
-export const BudgetProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }) => {
+/**
+ * Provides budget state synchronized to Firestore under budgets/{groupId},
+ * with local AsyncStorage caching.
+ */
+export function BudgetProvider({ groupId, children }: BudgetProviderProps) {
   const [state, setState] = useState<BudgetState>(defaultState);
 
-  // Subscribe to the shared Firestore document
+  // 1) Subscribe to Firestore doc for this group
   useEffect(() => {
-    const ref = doc(db, 'budgets', SHARED_DOC_ID);
+    const ref = doc(db, 'budgets', groupId);
     const unsubscribe = onSnapshot(ref, (snap) => {
       if (snap.exists()) {
         setState(snap.data() as BudgetState);
       } else {
-        // Initialize it if absent
+        // initialize if absent
         setDoc(ref, defaultState);
       }
     });
     return unsubscribe;
-  }, []);
+  }, [groupId]);
 
-  // Persist to Firestore (and AsyncStorage) on any change
+  // 2) Persist to Firestore and AsyncStorage on any change
   useEffect(() => {
-    const ref = doc(db, 'budgets', SHARED_DOC_ID);
+    const ref = doc(db, 'budgets', groupId);
     setDoc(ref, state);
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    AsyncStorage.setItem(`${STORAGE_KEY}-${groupId}`, JSON.stringify(state));
+  }, [state, groupId]);
 
   return (
     <BudgetContext.Provider value={{ state, setState }}>
       {children}
     </BudgetContext.Provider>
   );
-};
+}
 
+/** Hook to consume the budget context */
 export const useBudget = () => useContext(BudgetContext);
