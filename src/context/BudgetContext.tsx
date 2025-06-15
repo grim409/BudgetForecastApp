@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import * as React from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { useAuth } from './AuthContext';
 
 export interface RecurringItem {
   id: string;
@@ -27,6 +27,7 @@ export interface BudgetState {
 }
 
 const STORAGE_KEY = '@budget_state';
+const SHARED_DOC_ID = 'shared';
 
 const defaultState: BudgetState = {
   recurringItems: [],
@@ -42,36 +43,28 @@ const BudgetContext = createContext<{
 });
 
 export const BudgetProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }) => {
-  const { user } = useAuth();
   const [state, setState] = useState<BudgetState>(defaultState);
 
-  // Load from Firestore when authenticated, otherwise from AsyncStorage
+  // Subscribe to the shared Firestore document
   useEffect(() => {
-    if (user) {
-      const ref = doc(db, 'budgets', user.uid);
-      const unsub = onSnapshot(ref, (snap) => {
-        if (snap.exists()) {
-          setState(snap.data() as BudgetState);
-        }
-      });
-      return unsub;
-    } else {
-      AsyncStorage.getItem(STORAGE_KEY).then((json) => {
-        if (json) {
-          setState(JSON.parse(json));
-        }
-      });
-    }
-  }, [user]);
+    const ref = doc(db, 'budgets', SHARED_DOC_ID);
+    const unsubscribe = onSnapshot(ref, (snap) => {
+      if (snap.exists()) {
+        setState(snap.data() as BudgetState);
+      } else {
+        // Initialize it if absent
+        setDoc(ref, defaultState);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
-  // Persist to Firestore when authenticated, otherwise to AsyncStorage
+  // Persist to Firestore (and AsyncStorage) on any change
   useEffect(() => {
-    if (user) {
-      setDoc(doc(db, 'budgets', user.uid), state);
-    } else {
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    }
-  }, [state, user]);
+    const ref = doc(db, 'budgets', SHARED_DOC_ID);
+    setDoc(ref, state);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [state]);
 
   return (
     <BudgetContext.Provider value={{ state, setState }}>
