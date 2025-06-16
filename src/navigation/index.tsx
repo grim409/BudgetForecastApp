@@ -1,5 +1,3 @@
-// src/navigation/index.tsx
-
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -7,6 +5,7 @@ import HomeScreen from '../screens/HomeScreen';
 import RecurringItemForm from '../screens/RecurringItemForm';
 import PurchaseListScreen from '../screens/PurchaseListScreen';
 import PurchaseFormScreen from '../screens/PurchaseFormScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import { RecurringItem, OneOffPurchase } from '../context/BudgetContext';
 
 export type RootStackParamList = {
@@ -46,6 +45,11 @@ export default function AppNavigator() {
         options={({ route }) => ({
           title: route.params?.item ? 'Edit Purchase' : 'Add Purchase',
         })}
+      />
+      <Stack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ title: 'Settings' }}
       />
     </Stack.Navigator>
   );
