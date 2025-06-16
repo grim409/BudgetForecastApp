@@ -40,10 +40,10 @@ export default function HomeScreen() {
   const screenWidth = Dimensions.get('window').width;
 
   const [horizon, setHorizon] = useState<HorizonOption>(
-    horizonOptions[1]  // default 1 Month
+    horizonOptions[1] // default 1 Month
   );
 
-  // Calculate monthly & daily net
+  // Compute net flows
   const totalMonthly = state.recurringItems.reduce((sum, item) => {
     let m = item.amount;
     switch (item.unit) {
@@ -71,8 +71,12 @@ export default function HomeScreen() {
   const POINT_WIDTH = 60;
   const HORIZ_PADDING = 32;
 
-  // Build forecast data (now including startingBalance internally in the chart)
-  const forecastData = Array.from({ length: steps }).map((_, i) => {
+  // Build forecast data: include today as the initial point
+  const todayLabel = isDaily
+    ? `${today.getMonth() + 1}/${today.getDate()}`
+    : `${today.getMonth() + 1}/${String(today.getFullYear()).slice(-2)}`;
+
+  const futureData = Array.from({ length: steps }).map((_, i) => {
     const date = isDaily
       ? new Date(
           today.getFullYear(),
@@ -108,10 +112,16 @@ export default function HomeScreen() {
     };
   });
 
+  const forecastData = [
+    { label: todayLabel, value: state.startingBalance },
+    ...futureData,
+  ];
+
   const yData = forecastData.map((p) => p.value);
   const xLabels = forecastData.map((p) => p.label);
-  const rawWidth = xLabels.length * POINT_WIDTH;
+  const rawWidth = forecastData.length * POINT_WIDTH;
   const chartWidth = Math.max(rawWidth, screenWidth - HORIZ_PADDING);
+
   const chartData = { labels: xLabels, datasets: [{ data: yData }] };
   const chartConfig = {
     backgroundGradientFrom: '#fff',
@@ -151,7 +161,9 @@ export default function HomeScreen() {
         <View>
           {/* Projected Net & Settings */}
           <View style={styles.headerRow}>
-            <Text style={styles.projectedLabel}>Projected Net</Text>
+            <Text style={styles.projectedLabel}>
+              Projected Net
+            </Text>
             <Text style={styles.projectedValue}>
               ${(isDaily ? dailyNet : totalMonthly).toFixed(2)}
               {isDaily ? ' /day' : ' /month'}
@@ -166,12 +178,16 @@ export default function HomeScreen() {
 
           <Button
             title="Add Recurring Item"
-            onPress={() => navigation.navigate('AddRecurring', {})}
+            onPress={() =>
+              navigation.navigate('AddRecurring', {})
+            }
           />
           <View style={{ height: 8 }} />
           <Button
             title="One-Off Purchases"
-            onPress={() => navigation.navigate('PurchaseList')}
+            onPress={() =>
+              navigation.navigate('PurchaseList')
+            }
           />
 
           <View style={{ height: 16 }} />
