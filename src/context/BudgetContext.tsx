@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getBudget, setBudget } from '../firebaseRest';
 
@@ -20,7 +20,6 @@ export interface OneOffPurchase {
 }
 
 export interface BudgetState {
-  /** User’s current account balance */
   startingBalance: number;
   recurringItems: RecurringItem[];
   purchases: OneOffPurchase[];
@@ -47,10 +46,13 @@ const BudgetContext = createContext<{
   setState: () => {},
 });
 
-export function BudgetProvider({ groupId, children }: BudgetProviderProps) {
+export function BudgetProvider({
+  groupId,
+  children,
+}: BudgetProviderProps) {
   const [state, setState] = useState<BudgetState>(defaultState);
+  const initialized = useRef(false);
 
-  // 1) Load & merge defaultState with local cache and remote REST data
   useEffect(() => {
     AsyncStorage.getItem(`${STORAGE_KEY}-${groupId}`)
       .then(json => {
@@ -74,11 +76,14 @@ export function BudgetProvider({ groupId, children }: BudgetProviderProps) {
           return setBudget(groupId, defaultState);
         }
       })
-      .catch(err => console.error('GET budget failed', err));
+      .catch(err => console.error('GET budget failed', err))
+      .finally(() => {
+        initialized.current = true;
+      });
   }, [groupId]);
 
-  // 2) Persist state to Firestore REST & AsyncStorage on any change
   useEffect(() => {
+    if (!initialized.current) return;
     console.log('📡 REST setBudget', state);
     setBudget(groupId, state).catch(err =>
       console.error('PATCH budget failed', err)
