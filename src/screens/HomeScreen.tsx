@@ -164,6 +164,18 @@ export default function HomeScreen() {
 
           <View style={{ height: 16 }} />
 
+          <Button
+            title="Add Recurring Item"
+            onPress={() => navigation.navigate('AddRecurring', {})}
+          />
+          <View style={{ height: 8 }} />
+          <Button
+            title="One-Off Purchases"
+            onPress={() => navigation.navigate('PurchaseList')}
+          />
+
+          <View style={{ height: 16 }} />
+
           {/* Horizon Selector */}
           <Text style={styles.label}>Forecast Horizon</Text>
           <View style={styles.pickerRow}>

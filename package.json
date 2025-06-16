@@ -29,7 +29,8 @@
     "react-native-url-polyfill": "^2.0.0",
     "uuid": "^11.1.0",
     "victory": "^37.3.6",
-    "victory-native": "^41.17.4"
+    "victory-native": "^41.17.4",
+    "expo-updates": "~0.28.14"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
