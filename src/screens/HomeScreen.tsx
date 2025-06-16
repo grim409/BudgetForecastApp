@@ -26,13 +26,43 @@ interface HorizonOption {
 }
 
 const horizonOptions: HorizonOption[] = [
-  { label: '1 Week', unit: 'day', count: 7 },
-  { label: '1 Month', unit: 'day', count: 30 },
+  { label: '1 Week', unit: 'day',   count: 7  },
+  { label: '1 Month', unit: 'day',  count: 30 },
   { label: '3 Months', unit: 'month', count: 3 },
   { label: '6 Months', unit: 'month', count: 6 },
   { label: '12 Months', unit: 'month', count: 12 },
   { label: '24 Months', unit: 'month', count: 24 },
 ];
+
+function getOccurrences(item: RecurringItem, toDate: Date): number {
+  const start = new Date(item.startDate);
+  if (toDate < start) return 0;
+
+  switch (item.unit) {
+    case 'day': {
+      const diffDays = Math.floor(
+        (toDate.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      return Math.floor(diffDays / item.interval) + 1;
+    }
+    case 'week': {
+      const diffDays = Math.floor(
+        (toDate.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      return Math.floor(diffDays / (7 * item.interval)) + 1;
+    }
+    case 'month': {
+      const years = toDate.getFullYear() - start.getFullYear();
+      const months =
+        years * 12 + (toDate.getMonth() - start.getMonth());
+      return Math.floor(months / item.interval) + 1;
+    }
+    case 'year': {
+      const years = toDate.getFullYear() - start.getFullYear();
+      return Math.floor(years / item.interval) + 1;
+    }
+  }
+}
 
 export default function HomeScreen() {
   const { state } = useBudget();
@@ -43,7 +73,7 @@ export default function HomeScreen() {
     horizonOptions[1] // default 1 Month
   );
 
-  // Compute net flows
+  // Calculate monthly & daily net (for label only)
   const totalMonthly = state.recurringItems.reduce((sum, item) => {
     let m = item.amount;
     switch (item.unit) {
@@ -71,11 +101,12 @@ export default function HomeScreen() {
   const POINT_WIDTH = 60;
   const HORIZ_PADDING = 32;
 
-  // Build forecast data: include today as the initial point
+  // 1) Label for today
   const todayLabel = isDaily
     ? `${today.getMonth() + 1}/${today.getDate()}`
     : `${today.getMonth() + 1}/${String(today.getFullYear()).slice(-2)}`;
 
+  // 2) Build future data points
   const futureData = Array.from({ length: steps }).map((_, i) => {
     const date = isDaily
       ? new Date(
@@ -89,29 +120,28 @@ export default function HomeScreen() {
           1
         );
 
-    const recurringBalance = isDaily
-      ? dailyNet * (i + 1)
-      : totalMonthly * (i + 1);
+    // sum discrete occurrences
+    const recurringSum = state.recurringItems.reduce((acc, item) => {
+      const occ = getOccurrences(item, date);
+      const sign = item.type === 'credit' ? 1 : -1;
+      return acc + occ * item.amount * sign;
+    }, 0);
 
-    const purchaseImpact = purchases
+    const purchaseSum = purchases
       .filter((p) => new Date(p.plannedDate) <= date)
-      .reduce((sum, p) => sum - p.amount, 0);
-
-    const label = isDaily
-      ? `${date.getMonth() + 1}/${date.getDate()}`
-      : `${date.getMonth() + 1}/${String(
-          date.getFullYear()
-        ).slice(-2)}`;
+      .reduce((acc, p) => acc - p.amount, 0);
 
     return {
-      label,
-      value:
-        state.startingBalance +
-        recurringBalance +
-        purchaseImpact,
+      label: isDaily
+        ? `${date.getMonth() + 1}/${date.getDate()}`
+        : `${date.getMonth() + 1}/${String(
+            date.getFullYear()
+          ).slice(-2)}`,
+      value: state.startingBalance + recurringSum + purchaseSum,
     };
   });
 
+  // 3) Prepend today's point
   const forecastData = [
     { label: todayLabel, value: state.startingBalance },
     ...futureData,
@@ -170,7 +200,9 @@ export default function HomeScreen() {
             </Text>
             <Button
               title="⚙️"
-              onPress={() => navigation.navigate('Settings')}
+              onPress={() =>
+                navigation.navigate('Settings')
+              }
             />
           </View>
 
@@ -198,9 +230,10 @@ export default function HomeScreen() {
             <Picker
               selectedValue={horizon.label}
               onValueChange={(label) => {
-                const opt = horizonOptions.find(
-                  (o) => o.label === label
-                )!;
+                const opt =
+                  horizonOptions.find(
+                    (o) => o.label === label
+                  )!;
                 setHorizon(opt);
               }}
               mode="dropdown"
@@ -222,7 +255,9 @@ export default function HomeScreen() {
           </Text>
           <ScrollView
             horizontal
-            contentContainerStyle={styles.chartScroll}
+            contentContainerStyle={
+              styles.chartScroll
+            }
           >
             <LineChart
               data={chartData}
