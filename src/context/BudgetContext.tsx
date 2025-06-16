@@ -1,9 +1,6 @@
-// src/context/BudgetContext.tsx
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { db } from '../firebase';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { getBudget, setBudget } from '../firebaseRest';
 
 export interface RecurringItem {
   id: string;
@@ -34,13 +31,11 @@ const defaultState: BudgetState = {
 
 const STORAGE_KEY = '@budget_state';
 
-/** Props for the BudgetProvider, including the groupId and children */
 interface BudgetProviderProps {
   groupId: string;
   children: React.ReactNode;
 }
 
-/** Context to hold the budget state & setter */
 const BudgetContext = createContext<{
   state: BudgetState;
   setState: React.Dispatch<React.SetStateAction<BudgetState>>;
@@ -49,32 +44,43 @@ const BudgetContext = createContext<{
   setState: () => {},
 });
 
-/**
- * Provides budget state synchronized to Firestore under budgets/{groupId},
- * with local AsyncStorage caching.
- */
 export function BudgetProvider({ groupId, children }: BudgetProviderProps) {
   const [state, setState] = useState<BudgetState>(defaultState);
 
-  // 1) Subscribe to Firestore doc for this group
+  // 1) Load from AsyncStorage, then fetch from Firestore REST
   useEffect(() => {
-    const ref = doc(db, 'budgets', groupId);
-    const unsubscribe = onSnapshot(ref, (snap) => {
-      if (snap.exists()) {
-        setState(snap.data() as BudgetState);
-      } else {
-        // initialize if absent
-        setDoc(ref, defaultState);
-      }
-    });
-    return unsubscribe;
+    AsyncStorage.getItem(`${STORAGE_KEY}-${groupId}`)
+      .then(json => {
+        if (json) {
+          try {
+            setState(JSON.parse(json));
+          } catch (e) {
+            console.error('Failed to parse local cache', e);
+          }
+        }
+      })
+      .catch(err => console.error('AsyncStorage getItem failed', err));
+
+    getBudget(groupId)
+      .then(data => {
+        if (data) {
+          setState(data);
+        } else {
+          // Initialize remote document if missing
+          return setBudget(groupId, defaultState);
+        }
+      })
+      .catch(err => console.error('GET budget failed', err));
   }, [groupId]);
 
-  // 2) Persist to Firestore and AsyncStorage on any change
+  // 2) Persist any change to Firestore REST and AsyncStorage
   useEffect(() => {
-    const ref = doc(db, 'budgets', groupId);
-    setDoc(ref, state);
-    AsyncStorage.setItem(`${STORAGE_KEY}-${groupId}`, JSON.stringify(state));
+    console.log('📡 REST setBudget', state);
+    setBudget(groupId, state).catch(err => console.error('PATCH budget failed', err));
+
+    AsyncStorage.setItem(`${STORAGE_KEY}-${groupId}`, JSON.stringify(state)).catch(err =>
+      console.error('AsyncStorage setItem failed', err),
+    );
   }, [state, groupId]);
 
   return (
@@ -84,5 +90,4 @@ export function BudgetProvider({ groupId, children }: BudgetProviderProps) {
   );
 }
 
-/** Hook to consume the budget context */
 export const useBudget = () => useContext(BudgetContext);

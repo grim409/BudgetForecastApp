@@ -1,3 +1,4 @@
+import 'react-native-url-polyfill/auto';
 import 'react-native-get-random-values';
 import { NavigationContainer } from '@react-navigation/native';
 import { GroupProvider, useGroup } from './src/context/GroupContext';
