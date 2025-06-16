@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+// src/screens/RecurringItemForm.tsx
+
+import React, { useState, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -22,6 +24,7 @@ export default function RecurringItemForm({ route, navigation }: Props) {
   const { state, setState } = useBudget();
   const existing = route.params?.item;
 
+  // --- form state ---
   const [title, setTitle] = useState(existing?.title ?? '');
   const [amount, setAmount] = useState(
     existing ? existing.amount.toString() : ''
@@ -35,56 +38,82 @@ export default function RecurringItemForm({ route, navigation }: Props) {
   const [unit, setUnit] = useState<'day' | 'week' | 'month' | 'year'>(
     existing?.unit ?? 'month'
   );
+
+  // start-date picker
   const [startDate, setStartDate] = useState<Date>(
     existing ? new Date(existing.startDate) : new Date()
   );
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showStartPicker, setShowStartPicker] = useState(false);
+
+  // ** end-date picker **
+  const [endDate, setEndDate] = useState<Date | undefined>(
+    existing?.endDate ? new Date(existing.endDate) : undefined
+  );
+  const [showEndPicker, setShowEndPicker] = useState(false);
+
+  // set navigation title
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: existing ? 'Edit Recurring' : 'New Recurring',
+    });
+  }, [navigation, existing]);
+
+  // handlers
+  const onChangeStart = (_: any, selected?: Date) => {
+    setShowStartPicker(Platform.OS === 'ios');
+    if (selected) setStartDate(selected);
+  };
+  const onChangeEnd = (_: any, selected?: Date) => {
+    setShowEndPicker(Platform.OS === 'ios');
+    if (selected) setEndDate(selected);
+  };
 
   const save = () => {
+    const parsedAmount = parseFloat(amount);
+    const parsedInterval = parseInt(interval, 10);
+    if (!title.trim() || isNaN(parsedAmount) || isNaN(parsedInterval)) {
+      return Alert.alert('Please fill out all required fields.');
+    }
+
     const newItem: RecurringItem = {
       id: existing?.id ?? uuidv4(),
       title: title.trim(),
-      amount: parseFloat(amount),
+      amount: parsedAmount,
       type,
-      interval: parseInt(interval, 10) || 1,
-      unit,
       startDate: startDate.toISOString(),
+      ...(endDate && { endDate: endDate.toISOString() }),
+      interval: parsedInterval,
+      unit,
     };
 
-    if (existing) {
-      // update
-      setState({
-        ...state,
-        recurringItems: state.recurringItems.map((i) =>
-          i.id === existing.id ? newItem : i
-        ),
-      });
-    } else {
-      // add
-      setState({
-        ...state,
-        recurringItems: [...state.recurringItems, newItem],
-      });
-    }
+    setState((prev) => ({
+      ...prev,
+      recurringItems: existing
+        ? prev.recurringItems.map((i) =>
+            i.id === newItem.id ? newItem : i
+          )
+        : [...prev.recurringItems, newItem],
+    }));
+
     navigation.goBack();
   };
 
   const remove = () => {
     Alert.alert(
       'Delete',
-      'Are you sure you want to delete this item?',
+      'Are you sure?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            setState({
-              ...state,
-              recurringItems: state.recurringItems.filter(
+            setState((prev) => ({
+              ...prev,
+              recurringItems: prev.recurringItems.filter(
                 (i) => i.id !== existing!.id
               ),
-            });
+            }));
             navigation.goBack();
           },
         },
@@ -93,14 +122,9 @@ export default function RecurringItemForm({ route, navigation }: Props) {
     );
   };
 
-  const onChangeDate = (_: any, date?: Date) => {
-    setShowDatePicker(false);
-    if (date) setStartDate(date);
-  };
-
   return (
     <View style={styles.container}>
-      {/* Credit / Debit */}
+      {/* Credit / Debit toggle */}
       <View style={styles.toggleRow}>
         <Button
           title="Credit"
@@ -120,7 +144,6 @@ export default function RecurringItemForm({ route, navigation }: Props) {
         style={styles.input}
         value={title}
         onChangeText={setTitle}
-        placeholder="e.g. Salary"
       />
 
       <Text style={styles.label}>Amount</Text>
@@ -129,7 +152,6 @@ export default function RecurringItemForm({ route, navigation }: Props) {
         value={amount}
         onChangeText={setAmount}
         keyboardType="numeric"
-        placeholder="e.g. 5000"
       />
 
       {/* Interval & Unit */}
@@ -146,10 +168,10 @@ export default function RecurringItemForm({ route, navigation }: Props) {
           style={styles.picker}
           onValueChange={(v) => setUnit(v as any)}
         >
-          <Picker.Item label="day(s)" value="day" />
-          <Picker.Item label="week(s)" value="week" />
-          <Picker.Item label="month(s)" value="month" />
-          <Picker.Item label="year(s)" value="year" />
+          <Picker.Item label="Day(s)" value="day" />
+          <Picker.Item label="Week(s)" value="week" />
+          <Picker.Item label="Month(s)" value="month" />
+          <Picker.Item label="Year(s)" value="year" />
         </Picker>
       </View>
 
@@ -157,16 +179,37 @@ export default function RecurringItemForm({ route, navigation }: Props) {
       <Text style={styles.label}>Start Date</Text>
       <TouchableOpacity
         style={styles.dateButton}
-        onPress={() => setShowDatePicker(true)}
+        onPress={() => setShowStartPicker(true)}
       >
         <Text>{startDate.toDateString()}</Text>
       </TouchableOpacity>
-      {showDatePicker && (
+      {showStartPicker && (
         <DateTimePicker
           value={startDate}
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={onChangeDate}
+          onChange={onChangeStart}
+        />
+      )}
+
+      {/* End Date */}
+      <Text style={styles.label}>End Date (optional)</Text>
+      <TouchableOpacity
+        style={styles.dateButton}
+        onPress={() => setShowEndPicker(true)}
+      >
+        <Text>
+          {endDate
+            ? endDate.toDateString()
+            : 'No end date (infinite)'}
+        </Text>
+      </TouchableOpacity>
+      {showEndPicker && (
+        <DateTimePicker
+          value={endDate ?? new Date()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={onChangeEnd}
         />
       )}
 
@@ -199,7 +242,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     padding: 8,
   },
-  inlineRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  inlineRow: { flexDirection: 'row', alignItems: 'center' },
   smallInput: { width: 60, marginRight: 8 },
   picker: { flex: 1 },
   dateButton: {

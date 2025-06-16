@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useRef,
+} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getBudget, setBudget } from '../firebaseRest';
 
@@ -7,7 +13,8 @@ export interface RecurringItem {
   title: string;
   amount: number;
   type: 'credit' | 'debit';
-  startDate: string;
+  startDate: string;       
+  endDate?: string;       
   interval: number;
   unit: 'day' | 'week' | 'month' | 'year';
 }
@@ -16,7 +23,7 @@ export interface OneOffPurchase {
   id: string;
   title: string;
   amount: number;
-  plannedDate: string;
+  plannedDate: string;     
 }
 
 export interface BudgetState {
@@ -55,7 +62,7 @@ export function BudgetProvider({
 
   useEffect(() => {
     AsyncStorage.getItem(`${STORAGE_KEY}-${groupId}`)
-      .then(json => {
+      .then((json) => {
         if (json) {
           try {
             const local = JSON.parse(json);
@@ -65,10 +72,10 @@ export function BudgetProvider({
           }
         }
       })
-      .catch(err => console.error('AsyncStorage getItem failed', err));
+      .catch((err) => console.error('AsyncStorage getItem failed', err));
 
     getBudget(groupId)
-      .then(data => {
+      .then((data) => {
         if (data) {
           setState({ ...defaultState, ...data });
         } else {
@@ -76,7 +83,7 @@ export function BudgetProvider({
           return setBudget(groupId, defaultState);
         }
       })
-      .catch(err => console.error('GET budget failed', err))
+      .catch((err) => console.error('GET budget failed', err))
       .finally(() => {
         initialized.current = true;
       });
@@ -85,13 +92,13 @@ export function BudgetProvider({
   useEffect(() => {
     if (!initialized.current) return;
     console.log('📡 REST setBudget', state);
-    setBudget(groupId, state).catch(err =>
+    setBudget(groupId, state).catch((err) =>
       console.error('PATCH budget failed', err)
     );
     AsyncStorage.setItem(
       `${STORAGE_KEY}-${groupId}`,
       JSON.stringify(state)
-    ).catch(err => console.error('AsyncStorage setItem failed', err));
+    ).catch((err) => console.error('AsyncStorage setItem failed', err));
   }, [state, groupId]);
 
   return (
