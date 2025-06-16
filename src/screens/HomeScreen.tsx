@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
 import {
-  View, Text, Button, StyleSheet, FlatList,
-  ListRenderItemInfo, Dimensions, ScrollView, TouchableOpacity
+  View,
+  Text,
+  Button,
+  StyleSheet,
+  FlatList,
+  ListRenderItemInfo,
+  Dimensions,
+  ScrollView,
+  TouchableOpacity,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { LineChart } from 'react-native-chart-kit';
 import { useBudget, RecurringItem, OneOffPurchase } from '../context/BudgetContext';
 import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
-
-type HomeNavProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 interface HorizonOption {
   label: string;
@@ -19,28 +23,37 @@ interface HorizonOption {
 }
 
 const horizonOptions: HorizonOption[] = [
-  { label: '1 Week',    unit: 'day',   count: 7   },
-  { label: '1 Month',   unit: 'day',   count: 30  },
-  { label: '3 Months',  unit: 'month', count: 3   },
-  { label: '6 Months',  unit: 'month', count: 6   },
-  { label: '12 Months', unit: 'month', count: 12  },
-  { label: '24 Months', unit: 'month', count: 24  },
+  { label: '1 Week', unit: 'day', count: 7 },
+  { label: '1 Month', unit: 'day', count: 30 },
+  { label: '3 Months', unit: 'month', count: 3 },
+  { label: '6 Months', unit: 'month', count: 6 },
+  { label: '12 Months', unit: 'month', count: 12 },
+  { label: '24 Months', unit: 'month', count: 24 },
 ];
 
 export default function HomeScreen() {
   const { state } = useBudget();
-  const navigation = useNavigation<HomeNavProp>();
+  const navigation = useNavigation<any>();
   const screenWidth = Dimensions.get('window').width;
 
   const [horizon, setHorizon] = useState<HorizonOption>(horizonOptions[1]); // default 1 Month
 
+  // compute net
   const totalMonthly = state.recurringItems.reduce((sum, item) => {
     let m = item.amount;
     switch (item.unit) {
-      case 'day':   m = (item.amount * item.interval * 365) / 12; break;
-      case 'week':  m = (item.amount * item.interval * 52) / 12; break;
-      case 'month': m = item.amount * item.interval; break;
-      case 'year':  m = (item.amount * item.interval) / 12; break;
+      case 'day':
+        m = (item.amount * item.interval * 365) / 12;
+        break;
+      case 'week':
+        m = (item.amount * item.interval * 52) / 12;
+        break;
+      case 'month':
+        m = item.amount * item.interval;
+        break;
+      case 'year':
+        m = (item.amount * item.interval) / 12;
+        break;
     }
     return sum + (item.type === 'credit' ? m : -m);
   }, 0);
@@ -67,32 +80,28 @@ export default function HomeScreen() {
       .reduce((sum, p) => sum - p.amount, 0);
 
     const label = isDaily
-      ? `${date.getMonth()+1}/${date.getDate()}`
-      : `${date.getMonth()+1}/${String(date.getFullYear()).slice(-2)}`;
+      ? `${date.getMonth() + 1}/${date.getDate()}`
+      : `${date.getMonth() + 1}/${String(date.getFullYear()).slice(-2)}`;
 
     return { label, value: recurringBalance + purchaseImpact };
   });
 
   const yData = forecastData.map(p => p.value);
   const xLabels = forecastData.map(p => p.label);
-
   const rawWidth = xLabels.length * POINT_WIDTH;
   const chartWidth = Math.max(rawWidth, screenWidth - HORIZ_PADDING);
-
   const chartData = { labels: xLabels, datasets: [{ data: yData }] };
   const chartConfig = {
     backgroundGradientFrom: '#fff',
-    backgroundGradientTo:   '#fff',
-    decimalPlaces:         0,
-    color:                (opacity = 1) => `rgba(30,144,255, ${opacity})`,
-    labelColor:           (opacity = 1) => `rgba(0,0,0, ${opacity})`,
-    propsForDots:         { r: '4', strokeWidth: '1', stroke: '#1e90ff' },
+    backgroundGradientTo: '#fff',
+    decimalPlaces: 0,
+    color: (opacity = 1) => `rgba(30,144,255, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(0,0,0, ${opacity})`,
+    propsForDots: { r: '4', strokeWidth: '1', stroke: '#1e90ff' },
   };
 
   const renderItem = ({ item }: ListRenderItemInfo<RecurringItem>) => (
-    <TouchableOpacity
-      onPress={() => navigation.navigate('AddRecurring', { item })}
-    >
+    <TouchableOpacity onPress={() => navigation.navigate('AddRecurring', { item })}>
       <View style={styles.itemRow}>
         <Text style={styles.itemTitle}>{item.title}</Text>
         <Text>
@@ -111,6 +120,15 @@ export default function HomeScreen() {
       contentContainerStyle={{ padding: 16 }}
       ListHeaderComponent={() => (
         <View>
+          {/* Projected Net & Buttons */}
+          <Text style={styles.title}>Projected Net</Text>
+          <Text style={styles.balance}>
+            ${(isDaily ? dailyNet : totalMonthly).toFixed(2)}{isDaily ? ' per day' : ' per month'}
+          </Text>
+          <Button title="Add Recurring Item" onPress={() => navigation.navigate('AddRecurring', {})} />
+          <View style={{ height: 16 }} />
+          <Button title="One-Off Purchases" onPress={() => navigation.navigate('PurchaseList')} />
+
           {/* Horizon Selector */}
           <Text style={styles.label}>Forecast Horizon</Text>
           <View style={styles.pickerRow}>
@@ -151,23 +169,7 @@ export default function HomeScreen() {
             </View>
           ))}
 
-          {/* Summary & Nav */}
-          <Text style={styles.title}>Projected Net</Text>
-          <Text style={styles.balance}>
-            ${(isDaily ? dailyNet : totalMonthly).toFixed(2)}
-            {isDaily ? ' per day' : ' per month'}
-          </Text>
-
-          <Button
-            title="Add Recurring Item"
-            onPress={() => navigation.navigate('AddRecurring', {})}
-          />
-          <View style={{ height: 16 }} />
-          <Button
-            title="One-Off Purchases"
-            onPress={() => navigation.navigate('PurchaseList')}
-          />
-
+          {/* Recurring Items Header */}
           <Text style={styles.listTitle}>Your Recurring Items</Text>
         </View>
       )}
@@ -177,8 +179,9 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Picker
   label:      { fontSize: 16, marginBottom: 4 },
-    pickerRow: {
+  pickerRow:  {
     width: '100%',
     borderWidth: 1,
     borderColor: '#999',
@@ -189,21 +192,24 @@ const styles = StyleSheet.create({
   },
   picker:     { width: '100%', color: '#000' },
 
+  // Chart
   chartTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
   chartScroll:{ paddingRight: 16, marginBottom: 16 },
   chartStyle: { borderRadius: 8 },
 
+  // Details
   detailTitle:{ fontSize: 18, fontWeight: '600', marginBottom: 4 },
   detailRow:  { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderColor: '#eee' },
   detailLabel:{ fontSize: 14 },
   detailValue:{ fontSize: 14, fontWeight: '500' },
 
-  title:      { fontSize: 22, fontWeight: '600', marginTop: 16, marginBottom: 4 },
+  // Projected Net & Buttons
+  title:      { fontSize: 22, fontWeight: '600', marginBottom: 4 },
   balance:    { fontSize: 28, fontWeight: 'bold', marginBottom: 16 },
 
+  // Recurring Items
   listTitle:  { fontSize: 18, marginTop: 24, marginBottom: 8 },
   itemRow:    { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderColor: '#ddd' },
   itemTitle:  { fontSize: 16 },
   emptyText:  { textAlign: 'center', marginTop: 32, color: '#666' },
-
 });
