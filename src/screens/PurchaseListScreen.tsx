@@ -9,6 +9,7 @@ import {
   ListRenderItemInfo,
 } from 'react-native';
 import { useBudget, OneOffPurchase } from '../context/BudgetContext';
+import { parseDate } from '../lib/forecast';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
@@ -27,7 +28,7 @@ export default function PurchaseListScreen() {
         <Text style={styles.itemTitle}>{item.title}</Text>
         <Text>
           ${item.amount.toFixed(2)} on{' '}
-          {new Date(item.plannedDate).toLocaleDateString()}
+          {parseDate(item.plannedDate).toLocaleDateString()}
         </Text>
       </View>
     </TouchableOpacity>

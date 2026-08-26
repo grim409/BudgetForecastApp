@@ -13,6 +13,7 @@ export type RootStackParamList = {
   AddRecurring: { item?: RecurringItem };
   PurchaseList: undefined;
   AddPurchase: { item?: OneOffPurchase };
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

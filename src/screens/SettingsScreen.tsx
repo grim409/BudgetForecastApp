@@ -6,10 +6,15 @@ import {
   Button,
   StyleSheet,
 } from 'react-native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useBudget } from '../context/BudgetContext';
+import { confirmDestructive } from '../lib/dialogs';
+import type { RootStackParamList } from '../navigation';
 
-export default function SettingsScreen({ navigation }: any) {
-  const { state, setState } = useBudget();
+type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
+
+export default function SettingsScreen({ navigation }: Props) {
+  const { state, setState, resetDemo } = useBudget();
   const [input, setInput] = useState(
     state.startingBalance.toString()
   );
@@ -31,6 +36,18 @@ export default function SettingsScreen({ navigation }: any) {
         placeholder="0.00"
       />
       <Button title="Save" onPress={save} />
+      <View style={styles.reset}>
+        <Button
+          title="Reset sample budget"
+          color="#b91c1c"
+          onPress={() => confirmDestructive(
+            'Reset sample budget?',
+            'This replaces the budget stored on this device.',
+            'Reset',
+            resetDemo,
+          )}
+        />
+      </View>
     </View>
   );
 }
@@ -53,4 +70,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 16,
   },
+  reset: { marginTop: 32 },
 });

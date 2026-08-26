@@ -5,15 +5,15 @@ import {
   TextInput,
   Button,
   StyleSheet,
-  TouchableOpacity,
-  Platform,
-  Alert,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { randomUUID } from 'expo-crypto';
+import DateField from '../components/DateField';
+import { confirmDestructive, notify } from '../lib/dialogs';
+import { isValidDateValue, parseDate } from '../lib/forecast';
 import { useBudget, OneOffPurchase } from '../context/BudgetContext';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
-import { v4 as uuidv4 } from 'uuid';
+
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddPurchase'>;
 
@@ -25,16 +25,28 @@ export default function PurchaseFormScreen({ route, navigation }: Props) {
   const [amount, setAmount] = useState(
     existing ? existing.amount.toString() : ''
   );
-  const [plannedDate, setPlannedDate] = useState<Date>(
-    existing ? new Date(existing.plannedDate) : new Date()
+  // Parse with the engine's oracle, not `new Date` — see parseDate's comment.
+  const [plannedDate, setPlannedDate] = useState<Date>(() =>
+    existing && isValidDateValue(existing.plannedDate) ? parseDate(existing.plannedDate) : new Date()
   );
-  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const save = () => {
+    const parsedAmount = Number(amount);
+    if (!title.trim() || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      notify('Enter a title and an amount greater than zero.');
+      return;
+    }
+    // toISOString throws RangeError on an Invalid Date, and this runs in an
+    // onPress handler, which no error boundary can catch.
+    if (Number.isNaN(plannedDate.getTime())) {
+      notify('Please choose a valid planned date.');
+      return;
+    }
+
     const newPurchase: OneOffPurchase = {
-      id: existing?.id ?? uuidv4(),
+      id: existing?.id ?? randomUUID(),
       title: title.trim(),
-      amount: parseFloat(amount),
+      amount: parsedAmount,
       plannedDate: plannedDate.toISOString(),
     };
 
@@ -51,31 +63,18 @@ export default function PurchaseFormScreen({ route, navigation }: Props) {
   };
 
   const remove = () => {
-    Alert.alert(
+    confirmDestructive(
       'Delete Purchase',
       'Are you sure you want to delete this purchase?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setState({
-              ...state,
-              purchases: state.purchases.filter(
-                (p) => p.id !== existing!.id
-              ),
-            });
-            navigation.goBack();
-          },
-        },
-      ]
+      'Delete',
+      () => {
+        setState({
+          ...state,
+          purchases: state.purchases.filter((p) => p.id !== existing!.id),
+        });
+        navigation.goBack();
+      },
     );
-  };
-
-  const onChangeDate = (_: any, date?: Date) => {
-    setShowDatePicker(false);
-    if (date) setPlannedDate(date);
   };
 
   return (
@@ -98,20 +97,11 @@ export default function PurchaseFormScreen({ route, navigation }: Props) {
       />
 
       <Text style={styles.label}>Planned Date</Text>
-      <TouchableOpacity
-        style={styles.dateButton}
-        onPress={() => setShowDatePicker(true)}
-      >
-        <Text>{plannedDate.toDateString()}</Text>
-      </TouchableOpacity>
-      {showDatePicker && (
-        <DateTimePicker
-          value={plannedDate}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={onChangeDate}
-        />
-      )}
+      <DateField
+        accessibilityLabel="Planned date"
+        value={plannedDate}
+        onChange={setPlannedDate}
+      />
 
       <View style={styles.buttonsRow}>
         {existing && (
@@ -135,13 +125,6 @@ const styles = StyleSheet.create({
     borderColor: '#999',
     borderRadius: 4,
     padding: 8,
-  },
-  dateButton: {
-    borderWidth: 1,
-    borderColor: '#999',
-    borderRadius: 4,
-    padding: 12,
-    marginBottom: 16,
   },
   buttonsRow: {
     flexDirection: 'row',

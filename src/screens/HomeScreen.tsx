@@ -1,22 +1,26 @@
-import React, { useState, useMemo } from 'react';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
+import { Picker } from '@react-native-picker/picker';
+import { format, parseISO } from 'date-fns';
+import React, { useMemo, useState } from 'react';
 import {
-  View,
-  Text,
   Button,
-  StyleSheet,
+  Dimensions,
   FlatList,
   ListRenderItemInfo,
-  Dimensions,
   ScrollView,
+  StyleSheet,
+  Text,
   TouchableOpacity,
+  View,
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 import { LineChart } from 'react-native-chart-kit';
-import { addDays, addWeeks, addMonths, addYears,
-         differenceInDays, differenceInWeeks,
-         differenceInMonths, differenceInYears } from 'date-fns';
-import { useBudget, RecurringItem, OneOffPurchase } from '../context/BudgetContext';
-import { useNavigation } from '@react-navigation/native';
+
+import { useBudget } from '../context/BudgetContext';
+import { buildForecast, getMonthlyNet, type RecurringItem } from '../lib/forecast';
+import type { RootStackParamList } from '../navigation';
+
+type Navigation = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 interface HorizonOption {
   label: string;
@@ -30,138 +34,52 @@ const horizonOptions: HorizonOption[] = [
   { label: '3 Months', unit: 'month', count: 3 },
   { label: '6 Months', unit: 'month', count: 6 },
   { label: '12 Months', unit: 'month', count: 12 },
-  { label: '24 Months', unit: 'month', count: 24 },
 ];
 
-function getOccurrences(item: RecurringItem, toDate: Date): number {
-  const start = new Date(item.startDate);
-  if (toDate < start) return 0;
-
-  let effectiveDate = toDate;
-  if (item.endDate) {
-    const end = new Date(item.endDate);
-    if (effectiveDate > end) effectiveDate = end;
-  }
-
-  switch (item.unit) {
-    case 'day': {
-      const days = differenceInDays(effectiveDate, start);
-      return Math.floor(days / item.interval) + 1;
-    }
-    case 'week': {
-      const weeks = differenceInWeeks(effectiveDate, start);
-      return Math.floor(weeks / item.interval) + 1;
-    }
-    case 'month': {
-      const months = differenceInMonths(effectiveDate, start);
-      return Math.floor(months / item.interval) + 1;
-    }
-    case 'year': {
-      const years = differenceInYears(effectiveDate, start);
-      return Math.floor(years / item.interval) + 1;
-    }
-    default:
-      return 0;
-  }
-}
+const currency = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 0,
+});
 
 export default function HomeScreen() {
   const { state } = useBudget();
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<Navigation>();
+  const [today] = useState(() => new Date());
+  const [horizon, setHorizon] = useState(horizonOptions[1]);
   const screenWidth = Dimensions.get('window').width;
 
-  const [horizon, setHorizon] = useState<HorizonOption>(horizonOptions[1]); // default 1 Month
-
-  // Calculate monthly & daily net (for label only)
-  const totalMonthly = state.recurringItems.reduce((sum, item) => {
-    let m = item.amount;
-    switch (item.unit) {
-      case 'day':
-        m = (item.amount * item.interval * 365) / 12;
-        break;
-      case 'week':
-        m = (item.amount * item.interval * 52) / 12;
-        break;
-      case 'month':
-        m = item.amount * item.interval;
-        break;
-      case 'year':
-        m = (item.amount * item.interval) / 12;
-        break;
-    }
-    return sum + (item.type === 'credit' ? m : -m);
-  }, 0);
-  const dailyNet = totalMonthly / 30;
-
-  const today = new Date();
-  const purchases = state.purchases as OneOffPurchase[];
-  const isDaily = horizon.unit === 'day';
-  const steps = horizon.count;
-  const POINT_WIDTH = 60;
-  const HORIZ_PADDING = 32;
-
-  // 1) Label for today
-  const todayLabel = isDaily
-    ? `${today.getMonth() + 1}/${today.getDate()}`
-    : `${today.getMonth() + 1}/${String(today.getFullYear()).slice(-2)}`;
-
-  // 2) Build future data points
-  const futureData = useMemo(() => {
-    return Array.from({ length: steps }).map((_, i) => {
-      // build the date exactly i+1 units out
-      const date = isDaily
-        ? addDays(today, i + 1)
-        : addMonths(today, i + 1);
-
-      // sum recurring occurrences up to that date
-      const recurringSum = state.recurringItems.reduce((acc, item) => {
-        const occ = getOccurrences(item, date);
-        const sign = item.type === 'credit' ? 1 : -1;
-        return acc + occ * item.amount * sign;
-      }, 0);
-
-      // sum one-offs on or before that date
-      const purchaseSum = purchases
-        .filter((p) => new Date(p.plannedDate) <= date)
-        .reduce((acc, p) => acc - p.amount, 0);
-
-      return {
-        label: isDaily
-          ? `${date.getMonth() + 1}/${date.getDate()}`
-          : `${date.getMonth() + 1}/${String(date.getFullYear()).slice(-2)}`,
-        value: state.startingBalance + recurringSum + purchaseSum,
-      };
-    });
-  }, [state, purchases, today, steps, isDaily]);
-
-  // 3) Prepend today's point
-  const forecastData = [
-    { label: todayLabel, value: state.startingBalance },
-    ...futureData,
-  ];
-
-  const yData = forecastData.map((p) => p.value);
-  const xLabels = forecastData.map((p) => p.label);
-  const rawWidth = forecastData.length * POINT_WIDTH;
-  const chartWidth = Math.max(rawWidth, screenWidth - HORIZ_PADDING);
-
-  const chartData = { labels: xLabels, datasets: [{ data: yData }] };
+  const monthlyNet = useMemo(() => getMonthlyNet(state, today), [state, today]);
+  const forecast = useMemo(
+    () => buildForecast(state, today, horizon.unit, horizon.count),
+    [horizon, state, today],
+  );
+  const chartWidth = Math.max(forecast.length * 60, screenWidth - 32);
+  const chartData = {
+    labels: forecast.map((point) => format(parseISO(point.date), horizon.unit === 'day' ? 'M/d' : 'MMM yy')),
+    datasets: [{ data: forecast.map((point) => point.balance) }],
+  };
   const chartConfig = {
-    backgroundGradientFrom: '#fff',
-    backgroundGradientTo: '#fff',
+    backgroundGradientFrom: '#ffffff',
+    backgroundGradientTo: '#ffffff',
     decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(30,144,255, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(0,0,0, ${opacity})`,
-    propsForDots: { r: '4', strokeWidth: '1', stroke: '#1e90ff' },
+    color: (opacity = 1) => `rgba(22, 101, 52, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(31, 41, 55, ${opacity})`,
+    propsForDots: { r: '4', strokeWidth: '1', stroke: '#166534' },
   };
 
   const renderItem = ({ item }: ListRenderItemInfo<RecurringItem>) => (
-    <TouchableOpacity onPress={() => navigation.navigate('AddRecurring', { item })}>
+    <TouchableOpacity
+      accessibilityRole="button"
+      onPress={() => navigation.navigate('AddRecurring', { item })}
+    >
       <View style={styles.itemRow}>
-        <Text style={styles.itemTitle}>{item.title}</Text>
-        <Text>
-          {item.type === 'credit' ? '+ ' : '- '}
-          ${item.amount.toFixed(2)} every {item.interval} {item.unit}(s)
+        <View>
+          <Text style={styles.itemTitle}>{item.title}</Text>
+          <Text style={styles.itemSchedule}>Every {item.interval} {item.unit}{item.interval === 1 ? '' : 's'}</Text>
+        </View>
+        <Text style={item.type === 'credit' ? styles.credit : styles.debit}>
+          {item.type === 'credit' ? '+' : '-'}{currency.format(item.amount)}
         </Text>
       </View>
     </TouchableOpacity>
@@ -170,49 +88,42 @@ export default function HomeScreen() {
   return (
     <FlatList
       data={state.recurringItems}
-      keyExtractor={(i) => i.id}
+      keyExtractor={(item) => item.id}
       renderItem={renderItem}
-      contentContainerStyle={{ padding: 16 }}
-      ListHeaderComponent={() => (
+      contentContainerStyle={styles.container}
+      ListHeaderComponent={(
         <View>
-          {/* Projected Net & Settings */}
-          <View style={styles.headerRow}>
-            <Text style={styles.projectedLabel}>Projected Net</Text>
-            <Text style={styles.projectedValue}>
-              ${(isDaily ? dailyNet : totalMonthly).toFixed(2)}
-              {isDaily ? ' /day' : ' /month'}
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>Current balance</Text>
+            <Text style={styles.balance}>{currency.format(state.startingBalance)}</Text>
+            <Text style={monthlyNet >= 0 ? styles.credit : styles.debit}>
+              {monthlyNet >= 0 ? '+' : ''}{currency.format(monthlyNet)} projected each month
             </Text>
-            <Button title="⚙️" onPress={() => navigation.navigate('Settings')} />
           </View>
 
-          <View style={{ height: 16 }} />
+          <View style={styles.actions}>
+            <Button title="Add recurring item" onPress={() => navigation.navigate('AddRecurring', {})} />
+            <Button title="Planned purchases" onPress={() => navigation.navigate('PurchaseList')} />
+            <Button title="Settings" onPress={() => navigation.navigate('Settings')} />
+          </View>
 
-          <Button title="Add Recurring Item" onPress={() => navigation.navigate('AddRecurring', {})} />
-          <View style={{ height: 8 }} />
-          <Button title="One-Off Purchases" onPress={() => navigation.navigate('PurchaseList')} />
-
-          <View style={{ height: 16 }} />
-
-          {/* Horizon Selector */}
-          <Text style={styles.label}>Forecast Horizon</Text>
-          <View style={styles.pickerRow}>
+          <Text style={styles.label}>Forecast horizon</Text>
+          <View style={styles.pickerFrame}>
             <Picker
               selectedValue={horizon.label}
               onValueChange={(label) => {
-                const opt = horizonOptions.find((o) => o.label === label)!;
-                setHorizon(opt);
+                const selected = horizonOptions.find((option) => option.label === label);
+                if (selected) setHorizon(selected);
               }}
-              mode="dropdown"
               style={styles.picker}
             >
-              {horizonOptions.map((o) => (
-                <Picker.Item key={o.label} label={o.label} value={o.label} />
+              {horizonOptions.map((option) => (
+                <Picker.Item key={option.label} label={option.label} value={option.label} />
               ))}
             </Picker>
           </View>
 
-          {/* Chart */}
-          <Text style={styles.chartTitle}>Balance Forecast ({horizon.label})</Text>
+          <Text style={styles.sectionTitle}>Balance forecast</Text>
           <ScrollView horizontal contentContainerStyle={styles.chartScroll}>
             <LineChart
               data={chartData}
@@ -220,72 +131,44 @@ export default function HomeScreen() {
               height={220}
               chartConfig={chartConfig}
               bezier
-              style={styles.chartStyle}
+              style={styles.chart}
             />
           </ScrollView>
 
-          {/* Details */}
-          <Text style={styles.detailTitle}>Forecast Details</Text>
-          {forecastData.map((p) => (
-            <View key={p.label} style={styles.detailRow}>
-              <Text style={styles.detailLabel}>{p.label}</Text>
-              <Text style={styles.detailValue}>${p.value.toFixed(2)}</Text>
+          <Text style={styles.sectionTitle}>Forecast details</Text>
+          {forecast.map((point) => (
+            <View key={point.date} style={styles.detailRow}>
+              <Text>{format(parseISO(point.date), 'MMM d, yyyy')}</Text>
+              <Text style={styles.detailValue}>{currency.format(point.balance)}</Text>
             </View>
           ))}
 
-          {/* Recurring Items Header */}
-          <Text style={styles.listTitle}>Your Recurring Items</Text>
+          <Text style={styles.sectionTitle}>Recurring items</Text>
         </View>
       )}
-      ListEmptyComponent={<Text style={styles.emptyText}>No items yet.</Text>}
+      ListEmptyComponent={<Text style={styles.empty}>No recurring items yet.</Text>}
     />
   );
 }
 
 const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  projectedLabel: { fontSize: 18, fontWeight: '600' },
-  projectedValue: { fontSize: 22, fontWeight: 'bold' },
-
-  label: { fontSize: 16, marginBottom: 4 },
-  pickerRow: {
-    width: '100%',
-    borderWidth: 1,
-    borderColor: '#999',
-    borderRadius: 4,
-    marginBottom: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  picker: { width: '100%', color: '#000' },
-
-  chartTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
-  chartScroll: { paddingRight: 16, marginBottom: 16 },
-  chartStyle: { borderRadius: 8 },
-
-  detailTitle: { fontSize: 18, fontWeight: '600', marginBottom: 4 },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderColor: '#eee',
-  },
-  detailLabel: { fontSize: 14 },
-  detailValue: { fontSize: 14, fontWeight: '500' },
-
-  listTitle: { fontSize: 18, marginTop: 24, marginBottom: 8 },
-  itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderColor: '#ddd',
-  },
-  itemTitle: { fontSize: 16 },
-  emptyText: { textAlign: 'center', marginTop: 32, color: '#666' },
+  container: { padding: 16, backgroundColor: '#f5f5ef' },
+  summaryCard: { padding: 20, marginBottom: 16, borderRadius: 12, backgroundColor: '#ffffff' },
+  summaryLabel: { color: '#6b7280', fontSize: 14 },
+  balance: { marginVertical: 4, color: '#111827', fontSize: 34, fontWeight: '700' },
+  credit: { color: '#166534', fontWeight: '600' },
+  debit: { color: '#b91c1c', fontWeight: '600' },
+  actions: { gap: 8, marginBottom: 20 },
+  label: { marginBottom: 6, color: '#374151', fontSize: 15, fontWeight: '600' },
+  pickerFrame: { marginBottom: 20, overflow: 'hidden', borderColor: '#d1d5db', borderWidth: 1, borderRadius: 8, backgroundColor: '#ffffff' },
+  picker: { width: '100%' },
+  sectionTitle: { marginTop: 18, marginBottom: 8, color: '#111827', fontSize: 20, fontWeight: '700' },
+  chartScroll: { paddingRight: 16 },
+  chart: { borderRadius: 12 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomColor: '#e5e7eb', borderBottomWidth: 1 },
+  detailValue: { fontWeight: '600' },
+  itemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, marginBottom: 8, borderRadius: 10, backgroundColor: '#ffffff' },
+  itemTitle: { color: '#111827', fontSize: 16, fontWeight: '600' },
+  itemSchedule: { marginTop: 3, color: '#6b7280', fontSize: 13 },
+  empty: { padding: 24, color: '#6b7280', textAlign: 'center' },
 });

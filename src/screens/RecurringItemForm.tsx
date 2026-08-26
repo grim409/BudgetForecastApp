@@ -7,21 +7,21 @@ import {
   TextInput,
   Button,
   StyleSheet,
-  Platform,
-  TouchableOpacity,
-  Alert,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
+import { randomUUID } from 'expo-crypto';
+import DateField from '../components/DateField';
+import { confirmDestructive, notify } from '../lib/dialogs';
+import { MAX_RECURRENCE_INTERVAL, isValidDateValue, parseDate } from '../lib/forecast';
 import { useBudget, RecurringItem } from '../context/BudgetContext';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation';
-import { v4 as uuidv4 } from 'uuid';
+
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddRecurring'>;
 
 export default function RecurringItemForm({ route, navigation }: Props) {
-  const { state, setState } = useBudget();
+  const { setState } = useBudget();
   const existing = route.params?.item;
 
   // --- form state ---
@@ -40,16 +40,16 @@ export default function RecurringItemForm({ route, navigation }: Props) {
   );
 
   // start-date picker
-  const [startDate, setStartDate] = useState<Date>(
-    existing ? new Date(existing.startDate) : new Date()
+  // Must use the engine's parser, not `new Date`: the two disagree on some ISO
+  // forms, and a mismatch here renders an Invalid Date that throws on format().
+  const [startDate, setStartDate] = useState<Date>(() =>
+    existing && isValidDateValue(existing.startDate) ? parseDate(existing.startDate) : new Date()
   );
-  const [showStartPicker, setShowStartPicker] = useState(false);
 
   // ** end-date picker **
-  const [endDate, setEndDate] = useState<Date | undefined>(
-    existing?.endDate ? new Date(existing.endDate) : undefined
+  const [endDate, setEndDate] = useState<Date | undefined>(() =>
+    existing?.endDate && isValidDateValue(existing.endDate) ? parseDate(existing.endDate) : undefined
   );
-  const [showEndPicker, setShowEndPicker] = useState(false);
 
   // set navigation title
   useLayoutEffect(() => {
@@ -58,25 +58,35 @@ export default function RecurringItemForm({ route, navigation }: Props) {
     });
   }, [navigation, existing]);
 
-  // handlers
-  const onChangeStart = (_: any, selected?: Date) => {
-    setShowStartPicker(Platform.OS === 'ios');
-    if (selected) setStartDate(selected);
-  };
-  const onChangeEnd = (_: any, selected?: Date) => {
-    setShowEndPicker(Platform.OS === 'ios');
-    if (selected) setEndDate(selected);
-  };
-
   const save = () => {
-    const parsedAmount = parseFloat(amount);
-    const parsedInterval = parseInt(interval, 10);
-    if (!title.trim() || isNaN(parsedAmount) || isNaN(parsedInterval)) {
-      return Alert.alert('Please fill out all required fields.');
+    const parsedAmount = Number(amount);
+    const parsedInterval = Number(interval);
+    if (
+      !title.trim() ||
+      !Number.isFinite(parsedAmount) ||
+      parsedAmount <= 0 ||
+      !Number.isInteger(parsedInterval) ||
+      parsedInterval <= 0 ||
+      parsedInterval > MAX_RECURRENCE_INTERVAL
+    ) {
+      return notify(
+        `Enter a title, a positive amount, and a whole-number interval between 1 and ${MAX_RECURRENCE_INTERVAL}.`,
+      );
+    }
+    if (endDate && endDate < startDate) {
+      return notify('The end date must be on or after the start date.');
+    }
+    // toISOString throws RangeError on an Invalid Date, and this runs in an
+    // onPress handler, which no error boundary can catch.
+    if (Number.isNaN(startDate.getTime())) {
+      return notify('Please choose a valid start date.');
+    }
+    if (endDate && Number.isNaN(endDate.getTime())) {
+      return notify('Please choose a valid end date.');
     }
 
     const newItem: RecurringItem = {
-      id: existing?.id ?? uuidv4(),
+      id: existing?.id ?? randomUUID(),
       title: title.trim(),
       amount: parsedAmount,
       type,
@@ -99,27 +109,13 @@ export default function RecurringItemForm({ route, navigation }: Props) {
   };
 
   const remove = () => {
-    Alert.alert(
-      'Delete',
-      'Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setState((prev) => ({
-              ...prev,
-              recurringItems: prev.recurringItems.filter(
-                (i) => i.id !== existing!.id
-              ),
-            }));
-            navigation.goBack();
-          },
-        },
-      ],
-      { cancelable: true }
-    );
+    confirmDestructive('Delete', 'Are you sure?', 'Delete', () => {
+      setState((prev) => ({
+        ...prev,
+        recurringItems: prev.recurringItems.filter((i) => i.id !== existing!.id),
+      }));
+      navigation.goBack();
+    });
   };
 
   return (
@@ -166,7 +162,7 @@ export default function RecurringItemForm({ route, navigation }: Props) {
         <Picker
           selectedValue={unit}
           style={styles.picker}
-          onValueChange={(v) => setUnit(v as any)}
+          onValueChange={(value) => setUnit(value as RecurringItem['unit'])}
         >
           <Picker.Item label="Day(s)" value="day" />
           <Picker.Item label="Week(s)" value="week" />
@@ -177,41 +173,20 @@ export default function RecurringItemForm({ route, navigation }: Props) {
 
       {/* Start Date */}
       <Text style={styles.label}>Start Date</Text>
-      <TouchableOpacity
-        style={styles.dateButton}
-        onPress={() => setShowStartPicker(true)}
-      >
-        <Text>{startDate.toDateString()}</Text>
-      </TouchableOpacity>
-      {showStartPicker && (
-        <DateTimePicker
-          value={startDate}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={onChangeStart}
-        />
-      )}
+      <DateField
+        accessibilityLabel="Start date"
+        value={startDate}
+        onChange={setStartDate}
+      />
 
       {/* End Date */}
       <Text style={styles.label}>End Date (optional)</Text>
-      <TouchableOpacity
-        style={styles.dateButton}
-        onPress={() => setShowEndPicker(true)}
-      >
-        <Text>
-          {endDate
-            ? endDate.toDateString()
-            : 'No end date (infinite)'}
-        </Text>
-      </TouchableOpacity>
-      {showEndPicker && (
-        <DateTimePicker
-          value={endDate ?? new Date()}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={onChangeEnd}
-        />
-      )}
+      <DateField
+        accessibilityLabel="End date"
+        placeholder="No end date (infinite)"
+        value={endDate}
+        onChange={setEndDate}
+      />
 
       {/* Actions */}
       <View style={styles.buttonsRow}>
@@ -245,13 +220,6 @@ const styles = StyleSheet.create({
   inlineRow: { flexDirection: 'row', alignItems: 'center' },
   smallInput: { width: 60, marginRight: 8 },
   picker: { flex: 1 },
-  dateButton: {
-    borderWidth: 1,
-    borderColor: '#999',
-    borderRadius: 4,
-    padding: 12,
-    marginBottom: 16,
-  },
   buttonsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -1,49 +1,27 @@
 {
   "expo": {
-    "name": "BudgetForecastApp",
+    "name": "Budget Forecast",
     "slug": "budgetforecastapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.budgetforecastapp",
+      "bundleIdentifier": "com.jasongrimberg.budgetforecast",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.anonymous.budgetforecastapp",
+      "package": "com.jasongrimberg.budgetforecast",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
-      "jsEngine": "jsc"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "plugins": [
-      "expo-build-properties"
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "30d02d25-ff08-428d-ada7-b0114b5843ec"
-      }
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/30d02d25-ff08-428d-ada7-b0114b5843ec"
     }
   }
 }
