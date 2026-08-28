@@ -5,10 +5,12 @@ import { useAuth } from '../context/AuthContext';
 import { useBudget } from '../context/BudgetContext';
 
 export default function SignInScreen() {
-  const { sendMagicLink, signOut, status, email, isOwner, available } = useAuth();
+  const { sendMagicLink, verifyCode, signOut, status, email, isOwner, available } = useAuth();
   const { mode } = useBudget();
   const [address, setAddress] = useState('');
+  const [code, setCode] = useState('');
   const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,6 +24,19 @@ export default function SignInScreen() {
       setError(caught instanceof Error ? caught.message : 'Could not send the sign-in link.');
     } finally {
       setSending(false);
+    }
+  };
+
+  const submitCode = async () => {
+    setError(null);
+    setVerifying(true);
+    try {
+      await verifyCode(address, code);
+      // On success the auth listener swaps this screen for the signed-in view.
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'That code was not accepted.');
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -72,9 +87,34 @@ export default function SignInScreen() {
       </Text>
 
       {sent ? (
-        <Text style={styles.ok}>
-          Check your email for a sign-in link, then return to this page.
-        </Text>
+        <>
+          <Text style={styles.ok}>
+            Check your email. Either open the link in this browser, or enter the code
+            from the email below — the code works from any browser.
+          </Text>
+          <Text style={styles.label}>Sign-in code</Text>
+          <TextInput
+            style={styles.input}
+            value={code}
+            onChangeText={setCode}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="number-pad"
+            placeholder="8-digit code"
+            accessibilityLabel="Sign-in code"
+          />
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <View style={styles.action}>
+            {verifying ? (
+              <ActivityIndicator />
+            ) : (
+              <Button title="Verify code" onPress={submitCode} disabled={!code.trim()} />
+            )}
+          </View>
+          <View style={styles.action}>
+            <Button title="Use a different email" onPress={() => { setSent(false); setCode(''); setError(null); }} />
+          </View>
+        </>
       ) : (
         <>
           <Text style={styles.label}>Email</Text>

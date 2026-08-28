@@ -15,6 +15,7 @@ interface AuthContextValue {
   isOwner: boolean;
   available: boolean;
   sendMagicLink: (email: string) => Promise<void>;
+  verifyCode: (email: string, code: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -71,6 +72,17 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
         const { error } = await supabase.auth.signInWithOtp({
           email: address.trim(),
           options: { emailRedirectTo: redirectTarget() },
+        });
+        if (error) throw error;
+      },
+      // The emailed code works in any browser, unlike the PKCE link which must
+      // be opened in the browser that requested it.
+      verifyCode: async (address: string, code: string) => {
+        if (!supabase) throw new Error('Sign-in is not configured for this build.');
+        const { error } = await supabase.auth.verifyOtp({
+          email: address.trim(),
+          token: code.trim(),
+          type: 'email',
         });
         if (error) throw error;
       },
