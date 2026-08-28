@@ -1,13 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addDays, format } from 'date-fns';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 import type { BudgetState } from '../lib/forecast';
 import { STORAGE_KEY, loadPersistedState } from '../lib/persistence';
+import { fetchRemoteBudget, saveRemoteBudget } from '../lib/remoteBudget';
+import { useAuth } from './AuthContext';
 
 export type { BudgetState, OneOffPurchase, RecurringItem } from '../lib/forecast';
 
-function createDemoState(): BudgetState {
+export type BudgetMode = 'demo' | 'cloud';
+export type SyncStatus = 'idle' | 'loading' | 'saving' | 'error';
+
+export function createDemoState(): BudgetState {
   const today = new Date();
   const date = (offset: number) => format(addDays(today, offset), 'yyyy-MM-dd');
 
@@ -28,44 +33,114 @@ interface BudgetContextValue {
   state: BudgetState;
   setState: React.Dispatch<React.SetStateAction<BudgetState>>;
   resetDemo: () => void;
+  mode: BudgetMode;
+  syncStatus: SyncStatus;
+  syncError: string | null;
+  retrySync: () => void;
 }
 
 const BudgetContext = createContext<BudgetContextValue | null>(null);
 
 export function BudgetProvider({ children }: React.PropsWithChildren) {
+  const { status: authStatus, userId, isOwner } = useAuth();
+
+  // Cloud mode requires BOTH a session and the approved identity. Anyone else
+  // stays in demo mode, and the database would refuse them regardless.
+  const mode: BudgetMode = authStatus === 'signed-in' && isOwner && userId ? 'cloud' : 'demo';
+
   const [state, setState] = useState<BudgetState>(() => createDemoState());
   const [ready, setReady] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  // Identifies which source the in-memory state came from. Writes are only ever
+  // flushed back to that same source, so demo edits cannot reach the database
+  // and cloud data cannot be written into browser storage.
+  const loadedFor = useRef<string | null>(null);
+  const target = mode === 'cloud' ? `cloud:${userId}` : 'demo';
 
   useEffect(() => {
-    let active = true;
+    if (authStatus === 'loading') return;
 
-    loadPersistedState(AsyncStorage)
-      .then((saved) => {
-        if (active && saved) setState(saved);
+    let active = true;
+    loadedFor.current = null;
+
+    const load = async (): Promise<BudgetState> => {
+      if (mode === 'cloud' && userId) {
+        const remote = await fetchRemoteBudget(userId);
+        // A first-time owner starts from the sample budget rather than a blank
+        // screen; it only becomes real data once they change something.
+        return remote ?? createDemoState();
+      }
+      const local = await loadPersistedState(AsyncStorage);
+      return local ?? createDemoState();
+    };
+
+    load()
+      .then((loaded) => {
+        if (!active) return;
+        setState(loaded);
+        loadedFor.current = target;
+        setSyncStatus('idle');
+        setSyncError(null);
+        setReady(true);
       })
-      .catch(() => undefined)
-      .finally(() => {
-        if (active) setReady(true);
+      .catch((error: unknown) => {
+        if (!active) return;
+        // Never fall back to demo data in cloud mode: silently showing sample
+        // numbers as if they were real, then saving them, would destroy data.
+        setSyncStatus('error');
+        setSyncError(error instanceof Error ? error.message : 'Could not load your budget.');
+        setReady(true);
       });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [authStatus, mode, target, userId, reloadToken]);
 
   useEffect(() => {
     if (!ready) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
-  }, [ready, state]);
+    // Only persist state that was loaded for the current target.
+    if (loadedFor.current !== target) return;
 
-  const resetDemo = () => {
+    let active = true;
+
+    if (mode === 'cloud' && userId) {
+      saveRemoteBudget(userId, state)
+        .then(() => {
+          if (active) {
+            setSyncStatus('idle');
+            setSyncError(null);
+          }
+        })
+        .catch((error: unknown) => {
+          if (!active) return;
+          setSyncStatus('error');
+          setSyncError(error instanceof Error ? error.message : 'Could not save your budget.');
+        });
+    } else {
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [mode, ready, state, target, userId]);
+
+  const resetDemo = useCallback(() => {
     const demo = createDemoState();
     setState(demo);
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(demo)).catch(() => undefined);
-  };
+    // The effect above writes it to whichever store is active.
+  }, []);
+
+  const retrySync = useCallback(() => setReloadToken((token) => token + 1), []);
 
   return (
-    <BudgetContext.Provider value={{ state, setState, resetDemo }}>
+    <BudgetContext.Provider
+      value={{ state, setState, resetDemo, mode, syncStatus, syncError, retrySync }}
+    >
       {children}
     </BudgetContext.Provider>
   );

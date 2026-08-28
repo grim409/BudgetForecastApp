@@ -6,6 +6,7 @@ import RecurringItemForm from '../screens/RecurringItemForm';
 import PurchaseListScreen from '../screens/PurchaseListScreen';
 import PurchaseFormScreen from '../screens/PurchaseFormScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import SignInScreen from '../screens/SignInScreen';
 import { RecurringItem, OneOffPurchase } from '../context/BudgetContext';
 
 export type RootStackParamList = {
@@ -14,6 +15,7 @@ export type RootStackParamList = {
   PurchaseList: undefined;
   AddPurchase: { item?: OneOffPurchase };
   Settings: undefined;
+  SignIn: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -51,6 +53,11 @@ export default function AppNavigator() {
         name="Settings"
         component={SettingsScreen}
         options={{ title: 'Settings' }}
+      />
+      <Stack.Screen
+        name="SignIn"
+        component={SignInScreen}
+        options={{ title: 'Account' }}
       />
     </Stack.Navigator>
   );

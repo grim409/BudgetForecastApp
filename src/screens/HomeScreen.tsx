@@ -43,7 +43,7 @@ const currency = new Intl.NumberFormat('en-US', {
 });
 
 export default function HomeScreen() {
-  const { state } = useBudget();
+  const { state, mode, syncStatus, syncError, retrySync } = useBudget();
   const navigation = useNavigation<Navigation>();
   const [today] = useState(() => new Date());
   const [horizon, setHorizon] = useState(horizonOptions[1]);
@@ -93,6 +93,25 @@ export default function HomeScreen() {
       contentContainerStyle={styles.container}
       ListHeaderComponent={(
         <View>
+          <TouchableOpacity
+            accessibilityRole="button"
+            onPress={() => navigation.navigate('SignIn')}
+            style={mode === 'cloud' ? styles.bannerPrivate : styles.bannerDemo}
+          >
+            <Text style={mode === 'cloud' ? styles.bannerPrivateText : styles.bannerDemoText}>
+              {mode === 'cloud'
+                ? `Private budget — synced${syncStatus === 'saving' ? ' (saving…)' : ''}`
+                : 'Demo mode — changes stay in this browser. Tap to sign in.'}
+            </Text>
+          </TouchableOpacity>
+          {syncStatus === 'error' ? (
+            <TouchableOpacity accessibilityRole="button" onPress={retrySync} style={styles.bannerError}>
+              <Text style={styles.bannerErrorText}>
+                {syncError ?? 'Sync problem.'} Tap to retry.
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>Current balance</Text>
             <Text style={styles.balance}>{currency.format(state.startingBalance)}</Text>
@@ -152,6 +171,27 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  bannerDemo: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  bannerDemoText: { color: '#92400e', fontSize: 14 },
+  bannerPrivate: {
+    backgroundColor: '#dcfce7',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  bannerPrivateText: { color: '#166534', fontSize: 14 },
+  bannerError: {
+    backgroundColor: '#fee2e2',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  bannerErrorText: { color: '#b91c1c', fontSize: 14 },
   container: { padding: 16, backgroundColor: '#f5f5ef' },
   summaryCard: { padding: 20, marginBottom: 16, borderRadius: 12, backgroundColor: '#ffffff' },
   summaryLabel: { color: '#6b7280', fontSize: 14 },
